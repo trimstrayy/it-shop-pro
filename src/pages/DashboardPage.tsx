@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -7,21 +8,31 @@ import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { 
   Package, 
   DollarSign, 
-  TrendingUp, 
   AlertTriangle, 
   FileText, 
   Receipt,
   Truck,
-  BarChart3
+  BarChart3,
+  Banknote,
+  CreditCard,
+  Building,
+  X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { HardwareProduct, SoftwareProduct } from '@/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const DashboardPage = () => {
   const { user } = useAuth();
   const { products, quotations, invoices, deliveries } = useData();
+  const [showRevenueBreakdown, setShowRevenueBreakdown] = useState(false);
 
   // Calculate stats
   const activeProducts = products.filter(p => p.status === 'active').length;
@@ -40,10 +51,17 @@ const DashboardPage = () => {
 
   const pendingQuotations = quotations.filter(q => q.status === 'draft' || q.status === 'sent').length;
   const pendingInvoices = invoices.filter(i => i.status === 'pending').length;
-  const totalRevenue = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, i) => sum + i.grandTotal, 0);
+  const paidInvoices = invoices.filter(i => i.status === 'paid');
+  const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.grandTotal, 0);
   const pendingDeliveries = deliveries.filter(d => d.status === 'pending' || d.status === 'shipped').length;
+
+  // Payment breakdown
+  const cashRevenue = paidInvoices.filter(i => i.paymentMode === 'cash').reduce((sum, i) => sum + i.grandTotal, 0);
+  const onlineRevenue = paidInvoices.filter(i => i.paymentMode === 'online').reduce((sum, i) => sum + i.grandTotal, 0);
+  const bankRevenue = paidInvoices.filter(i => i.paymentMode === 'bank').reduce((sum, i) => sum + i.grandTotal, 0);
+  const cashCount = paidInvoices.filter(i => i.paymentMode === 'cash').length;
+  const onlineCount = paidInvoices.filter(i => i.paymentMode === 'online').length;
+  const bankCount = paidInvoices.filter(i => i.paymentMode === 'bank').length;
 
   // Recent activity
   const recentInvoices = invoices.slice(0, 5);
@@ -65,14 +83,16 @@ const DashboardPage = () => {
           icon={Package}
           variant="primary"
         />
-        <StatCard
-          title="Total Revenue"
-          value={`$${totalRevenue.toLocaleString()}`}
-          subtitle="Paid invoices"
-          icon={DollarSign}
-          variant="success"
-          trend={{ value: 12.5, isPositive: true }}
-        />
+        <div onClick={() => setShowRevenueBreakdown(true)} className="cursor-pointer">
+          <StatCard
+            title="Total Revenue"
+            value={`$${totalRevenue.toLocaleString()}`}
+            subtitle="Click for payment breakdown"
+            icon={DollarSign}
+            variant="success"
+            trend={{ value: 12.5, isPositive: true }}
+          />
+        </div>
         <StatCard
           title="Pending Invoices"
           value={pendingInvoices}
@@ -208,6 +228,69 @@ const DashboardPage = () => {
           </CardHeader>
         </Card>
       )}
+
+      {/* Revenue Breakdown Dialog */}
+      <Dialog open={showRevenueBreakdown} onOpenChange={setShowRevenueBreakdown}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-success" />
+              Revenue Breakdown
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="text-center mb-6">
+              <p className="text-sm text-muted-foreground">Total Revenue</p>
+              <p className="text-3xl font-bold text-success">${totalRevenue.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">{paidInvoices.length} paid invoices</p>
+            </div>
+            
+            <div className="space-y-3">
+              {/* Cash */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <Banknote className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Cash Payments</p>
+                    <p className="text-xs text-muted-foreground">{cashCount} transactions</p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold">${cashRevenue.toLocaleString()}</p>
+              </div>
+
+              {/* Card/Online */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <CreditCard className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Card/Online Payments</p>
+                    <p className="text-xs text-muted-foreground">{onlineCount} transactions</p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold">${onlineRevenue.toLocaleString()}</p>
+              </div>
+
+              {/* Bank Transfer */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10">
+                    <Building className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Bank Transfers</p>
+                    <p className="text-xs text-muted-foreground">{bankCount} transactions</p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold">${bankRevenue.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

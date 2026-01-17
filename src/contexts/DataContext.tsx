@@ -90,7 +90,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
     setProducts(prev => prev.map(p => 
-      p.id === id ? { ...p, ...updates, updatedAt: new Date() } : p
+      p.id === id ? { ...p, ...updates, updatedAt: new Date() } as Product : p
     ));
   };
 
