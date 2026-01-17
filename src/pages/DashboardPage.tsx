@@ -53,7 +53,7 @@ const DashboardPage = () => {
   const pendingInvoices = invoices.filter(i => i.status === 'pending').length;
   const paidInvoices = invoices.filter(i => i.status === 'paid');
   const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.grandTotal, 0);
-  const pendingDeliveries = deliveries.filter(d => d.status === 'pending' || d.status === 'shipped').length;
+  const pendingDeliveries = deliveries.filter(d => d.status === 'pending' || d.status === 'in_progress').length;
 
   // Payment breakdown
   const cashRevenue = paidInvoices.filter(i => i.paymentMode === 'cash').reduce((sum, i) => sum + i.grandTotal, 0);

@@ -137,7 +137,31 @@ export interface Invoice {
 }
 
 // Delivery Types
-export type DeliveryStatus = 'pending' | 'shipped' | 'delivered' | 'returned';
+export type DeliveryStage = 
+  | 'in_inventory'           // Product ready for dispatch
+  | 'collected_by_driver'    // Collected by delivery person
+  | 'in_transit'             // On the way to destination
+  | 'arrived_at_location'    // Arrived at delivery location
+  | 'collected_by_receiver'  // Received by customer
+  | 'returned';              // Returned to inventory
+
+export type DeliveryStatus = 'pending' | 'in_progress' | 'completed' | 'returned';
+
+export interface DeliveryTrackingEvent {
+  id: string;
+  stage: DeliveryStage;
+  timestamp: Date;
+  notes?: string;
+  updatedBy: string;
+  location?: string;
+}
+
+export interface DeliveryPerson {
+  id: string;
+  name: string;
+  phone: string;
+  vehicleNumber?: string;
+}
 
 export interface Delivery {
   id: string;
@@ -146,10 +170,16 @@ export interface Delivery {
   productCode: string;
   productName: string;
   quantity: number;
+  currentStage: DeliveryStage;
   status: DeliveryStatus;
-  shippedAt?: Date;
-  deliveredAt?: Date;
-  returnedAt?: Date;
+  trackingHistory: DeliveryTrackingEvent[];
+  deliveryPerson?: DeliveryPerson;
+  recipientName?: string;
+  recipientPhone?: string;
+  deliveryAddress: string;
+  estimatedDeliveryDate?: Date;
+  actualDeliveryDate?: Date;
+  createdAt: Date;
   notes?: string;
 }
 
