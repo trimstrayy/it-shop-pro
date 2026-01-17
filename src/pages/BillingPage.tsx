@@ -10,13 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { 
   Dialog,
   DialogContent,
   DialogHeader,
@@ -43,6 +36,7 @@ const BillingPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showProductSearch, setShowProductSearch] = useState(false);
 
   const activeProducts = products.filter(p => p.status === 'active');
   const filteredProducts = searchTerm 
@@ -51,7 +45,7 @@ const BillingPage = () => {
         p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.barcode.includes(searchTerm)
       )
-    : [];
+    : activeProducts;
 
   const addItem = (product: Product) => {
     const stock = product.type === 'hardware' 
@@ -249,50 +243,73 @@ const BillingPage = () => {
             <div className="lg:col-span-2 space-y-6">
               {/* Search */}
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Search className="w-5 h-5" />
                     Add Products
                   </CardTitle>
+                  <Button 
+                    type="button"
+                    onClick={() => setShowProductSearch(!showProductSearch)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Product
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by name, code, or scan barcode..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                  
-                  {searchTerm && (
-                    <div className="mt-3 max-h-64 overflow-y-auto space-y-1 p-2 bg-muted/50 rounded-lg">
-                      {filteredProducts.slice(0, 10).map(product => {
-                        const stock = product.type === 'hardware' 
-                          ? (product as HardwareProduct).stockQuantity
-                          : (product as SoftwareProduct).licenseQuantity;
-                        return (
-                          <button
-                            key={product.id}
-                            onClick={() => addItem(product)}
-                            className="w-full flex items-center justify-between p-3 hover:bg-background rounded-lg transition-colors text-left"
-                            disabled={stock === 0}
-                          >
-                            <div>
-                              <p className="font-medium">{product.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {product.productCode} • {stock > 0 ? `${stock} available` : 'Out of stock'}
-                              </p>
-                            </div>
-                            <span className="font-bold text-primary">${product.sellingPrice}</span>
-                          </button>
-                        );
-                      })}
-                      {filteredProducts.length === 0 && (
-                        <p className="text-center text-muted-foreground py-4">No products found</p>
-                      )}
+                  {/* Product Search Panel - Like Quotation Form */}
+                  {showProductSearch && (
+                    <div className="mb-4 p-4 bg-muted/50 rounded-lg border border-border">
+                      <div className="relative mb-3">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, code, or barcode..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-9"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-y-auto space-y-1">
+                        {filteredProducts.slice(0, 15).map(product => {
+                          const stock = product.type === 'hardware' 
+                            ? (product as HardwareProduct).stockQuantity
+                            : (product as SoftwareProduct).licenseQuantity;
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => {
+                                addItem(product);
+                                setShowProductSearch(false);
+                              }}
+                              className="w-full flex items-center justify-between p-3 hover:bg-background rounded-lg transition-colors text-left"
+                              disabled={stock === 0}
+                            >
+                              <div>
+                                <p className="font-medium">{product.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {product.productCode} • {stock > 0 ? `${stock} available` : 'Out of stock'}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-primary">${product.sellingPrice}</span>
+                                <p className="text-xs text-muted-foreground">{product.type}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {filteredProducts.length === 0 && (
+                          <p className="text-center text-muted-foreground py-4">No products found</p>
+                        )}
+                      </div>
                     </div>
+                  )}
+
+                  {!showProductSearch && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Click "Add Product" to browse and add items to cart
+                    </p>
                   )}
                 </CardContent>
               </Card>
