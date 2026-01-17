@@ -3,9 +3,11 @@ import {
   Product, 
   Quotation, 
   Invoice, 
-  Delivery, 
+  Delivery,
+  DeliveryStage,
+  DeliveryTrackingEvent,
+  DeliveryPerson,
   InventoryLog,
-  QuotationItem,
   InvoiceItem
 } from '@/types';
 import { 
@@ -48,7 +50,10 @@ interface DataContextType {
 
   // Deliveries
   deliveries: Delivery[];
-  updateDeliveryStatus: (id: string, status: Delivery['status']) => void;
+  updateDeliveryStage: (id: string, stage: DeliveryStage, updatedBy: string, notes?: string, location?: string) => void;
+  assignDeliveryPerson: (id: string, deliveryPerson: DeliveryPerson) => void;
+  markDeliveryReturned: (id: string, updatedBy: string, notes?: string) => void;
+  getDelivery: (id: string) => Delivery | undefined;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -219,7 +224,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     });
 
     // Create delivery records
+    const invoice = invoices.find(i => i.id === newInvoice.id) || newInvoice;
     invoiceData.items.forEach(item => {
+      const now = new Date();
       const delivery: Delivery = {
         id: `del-${Date.now()}-${item.id}`,
         invoiceId: newInvoice.id,
@@ -227,7 +234,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         productCode: item.productCode,
         productName: item.productName,
         quantity: item.quantity,
+        currentStage: 'in_inventory',
         status: 'pending',
+        deliveryAddress: invoiceData.clientAddress,
+        recipientName: invoiceData.clientName,
+        recipientPhone: invoiceData.clientPhone,
+        createdAt: now,
+        trackingHistory: [
+          {
+            id: `th-${Date.now()}`,
+            stage: 'in_inventory',
+            timestamp: now,
+            updatedBy: 'System',
+            notes: 'Order created, ready for dispatch',
+          },
+        ],
       };
       setDeliveries(prev => [...prev, delivery]);
     });
@@ -261,17 +282,58 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   };
 
   // Delivery functions
-  const updateDeliveryStatus = (id: string, status: Delivery['status']) => {
-    const now = new Date();
-    const updates: Partial<Delivery> = { status };
-    
-    if (status === 'shipped') updates.shippedAt = now;
-    if (status === 'delivered') updates.deliveredAt = now;
-    if (status === 'returned') updates.returnedAt = now;
+  const getDelivery = (id: string) => deliveries.find(d => d.id === id);
 
+  const getDeliveryStatusFromStage = (stage: DeliveryStage): Delivery['status'] => {
+    if (stage === 'in_inventory') return 'pending';
+    if (stage === 'returned') return 'returned';
+    if (stage === 'collected_by_receiver') return 'completed';
+    return 'in_progress';
+  };
+
+  const updateDeliveryStage = (
+    id: string, 
+    stage: DeliveryStage, 
+    updatedBy: string, 
+    notes?: string, 
+    location?: string
+  ) => {
+    const now = new Date();
+    const newTrackingEvent: DeliveryTrackingEvent = {
+      id: `th-${Date.now()}`,
+      stage,
+      timestamp: now,
+      updatedBy,
+      notes,
+      location,
+    };
+
+    setDeliveries(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      
+      const newStatus = getDeliveryStatusFromStage(stage);
+      const updates: Partial<Delivery> = {
+        currentStage: stage,
+        status: newStatus,
+        trackingHistory: [...d.trackingHistory, newTrackingEvent],
+      };
+
+      if (stage === 'collected_by_receiver') {
+        updates.actualDeliveryDate = now;
+      }
+
+      return { ...d, ...updates };
+    }));
+  };
+
+  const assignDeliveryPerson = (id: string, deliveryPerson: DeliveryPerson) => {
     setDeliveries(prev => prev.map(d => 
-      d.id === id ? { ...d, ...updates } : d
+      d.id === id ? { ...d, deliveryPerson } : d
     ));
+  };
+
+  const markDeliveryReturned = (id: string, updatedBy: string, notes?: string) => {
+    updateDeliveryStage(id, 'returned', updatedBy, notes || 'Item returned to inventory');
   };
 
   return (
@@ -294,7 +356,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       updateInvoice,
       cancelInvoice,
       deliveries,
-      updateDeliveryStatus,
+      updateDeliveryStage,
+      assignDeliveryPerson,
+      markDeliveryReturned,
+      getDelivery,
     }}>
       {children}
     </DataContext.Provider>
