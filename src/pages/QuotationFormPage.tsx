@@ -382,13 +382,27 @@ const QuotationFormPage = () => {
                               <p className="text-xs text-muted-foreground">{item.productCode}</p>
                             </td>
                             <td className="py-3">
-                              <Input
-                                type="number"
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => updateItem(item.id, { quantity: parseInt(e.target.value) || 1 })}
-                                className="w-16 text-center h-8"
-                              />
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateItem(item.id, { quantity: Math.max(1, item.quantity - 1) })}
+                                >
+                                  -
+                                </Button>
+                                <span className="w-8 text-center font-medium">{item.quantity}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateItem(item.id, { quantity: item.quantity + 1 })}
+                                >
+                                  +
+                                </Button>
+                              </div>
                             </td>
                             <td className="py-3 text-right">Rs. {item.unitPrice.toLocaleString()}</td>
                             <td className="py-3">
