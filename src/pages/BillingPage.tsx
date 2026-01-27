@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -17,13 +18,16 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building } from 'lucide-react';
+import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 const BillingPage = () => {
-  const { products, invoices, addInvoice, updateInvoice } = useData();
+  const [searchParams] = useSearchParams();
+  const quotationId = searchParams.get('quotation');
+  
+  const { products, invoices, addInvoice, quotations, convertToInvoice } = useData();
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -37,6 +41,47 @@ const BillingPage = () => {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [showCheckout, setShowCheckout] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
+  const [fromQuotation, setFromQuotation] = useState<string | null>(null);
+
+  // Load quotation if converting
+  useEffect(() => {
+    if (quotationId) {
+      const quotation = quotations.find(q => q.id === quotationId);
+      if (quotation && quotation.status !== 'converted') {
+        setClientInfo({
+          name: quotation.clientName,
+          email: quotation.clientEmail,
+          phone: quotation.clientPhone,
+          address: quotation.clientAddress,
+        });
+        
+        // Convert quotation items to invoice items
+        const invoiceItems: InvoiceItem[] = quotation.items.map(item => {
+          const product = products.find(p => p.id === item.productId);
+          return {
+            id: item.id,
+            productId: item.productId,
+            productCode: item.productCode,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            costPrice: product?.costPrice || 0,
+            taxPercent: item.taxPercent,
+            discount: item.discount,
+            lineTotal: item.lineTotal,
+          };
+        });
+        
+        setItems(invoiceItems);
+        setFromQuotation(quotationId);
+        
+        toast({
+          title: 'Quotation Loaded',
+          description: `Converting ${quotation.quotationNumber} to invoice`,
+        });
+      }
+    }
+  }, [quotationId, quotations, products]);
 
   const activeProducts = products.filter(p => p.status === 'active');
   const filteredProducts = searchTerm 
@@ -148,31 +193,41 @@ const BillingPage = () => {
       return;
     }
 
-    const invoice = addInvoice({
-      clientName: clientInfo.name,
-      clientEmail: clientInfo.email,
-      clientPhone: clientInfo.phone,
-      clientAddress: clientInfo.address,
-      items,
-      subtotal,
-      totalDiscount,
-      totalTax,
-      grandTotal,
-      paymentMode,
-      status: 'paid',
-      createdBy: user?.id || '',
-      paidAt: new Date(),
-    });
+    // If converting from quotation, use the convertToInvoice function
+    if (fromQuotation) {
+      const invoice = convertToInvoice(fromQuotation, paymentMode);
+      toast({
+        title: 'Sale Complete!',
+        description: `Invoice ${invoice.invoiceNumber} created from quotation. Inventory updated.`,
+      });
+    } else {
+      const invoice = addInvoice({
+        clientName: clientInfo.name,
+        clientEmail: clientInfo.email,
+        clientPhone: clientInfo.phone,
+        clientAddress: clientInfo.address,
+        items,
+        subtotal,
+        totalDiscount,
+        totalTax,
+        grandTotal,
+        paymentMode,
+        status: 'paid',
+        createdBy: user?.id || '',
+        paidAt: new Date(),
+      });
 
-    toast({
-      title: 'Sale Complete!',
-      description: `Invoice ${invoice.invoiceNumber} has been created.`,
-    });
+      toast({
+        title: 'Sale Complete!',
+        description: `Invoice ${invoice.invoiceNumber} has been created. Inventory updated.`,
+      });
+    }
 
     // Reset form
     setItems([]);
     setClientInfo({ name: '', email: '', phone: '', address: '' });
     setShowCheckout(false);
+    setFromQuotation(null);
   };
 
   const recentInvoices = invoices.slice(0, 10);
@@ -196,7 +251,7 @@ const BillingPage = () => {
       key: 'total',
       header: 'Total',
       cell: (invoice: Invoice) => (
-        <span className="font-medium">${invoice.grandTotal.toLocaleString()}</span>
+        <span className="font-medium">NPR {invoice.grandTotal.toLocaleString()}</span>
       ),
     },
     {
@@ -238,6 +293,35 @@ const BillingPage = () => {
         </TabsList>
 
         <TabsContent value="pos">
+          {/* Quotation Banner */}
+          {fromQuotation && (
+            <Card className="mb-6 border-primary bg-primary/5">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium">Converting from Quotation</p>
+                    <p className="text-sm text-muted-foreground">
+                      This sale will mark the quotation as converted and update inventory
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="ml-auto"
+                    onClick={() => {
+                      setFromQuotation(null);
+                      setItems([]);
+                      setClientInfo({ name: '', email: '', phone: '', address: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Product Search & Cart */}
             <div className="lg:col-span-2 space-y-6">
@@ -257,7 +341,7 @@ const BillingPage = () => {
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  {/* Product Search Panel - Like Quotation Form */}
+                  {/* Product Search Panel */}
                   {showProductSearch && (
                     <div className="mb-4 p-4 bg-muted/50 rounded-lg border border-border">
                       <div className="relative mb-3">
@@ -293,7 +377,7 @@ const BillingPage = () => {
                                 </p>
                               </div>
                               <div className="text-right">
-                                <span className="font-bold text-primary">${product.sellingPrice}</span>
+                                <span className="font-bold text-primary">NPR {product.sellingPrice.toLocaleString()}</span>
                                 <p className="text-xs text-muted-foreground">{product.type}</p>
                               </div>
                             </button>
@@ -355,7 +439,7 @@ const BillingPage = () => {
                                 +
                               </Button>
                             </div>
-                            <span className="w-24 text-right font-medium">${item.lineTotal.toFixed(2)}</span>
+                            <span className="w-28 text-right font-medium">NPR {item.lineTotal.toFixed(0)}</span>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -418,16 +502,16 @@ const BillingPage = () => {
                 <CardContent className="space-y-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>NPR {subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tax</span>
-                    <span>${totalTax.toFixed(2)}</span>
+                    <span className="text-muted-foreground">Tax (VAT 13%)</span>
+                    <span>NPR {totalTax.toFixed(0)}</span>
                   </div>
                   <div className="border-t border-border pt-4">
                     <div className="flex justify-between">
                       <span className="font-semibold">Total</span>
-                      <span className="text-2xl font-bold text-primary">${grandTotal.toFixed(2)}</span>
+                      <span className="text-2xl font-bold text-primary">NPR {grandTotal.toFixed(0)}</span>
                     </div>
                   </div>
 
