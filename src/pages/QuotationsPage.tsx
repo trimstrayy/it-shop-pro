@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Eye, FileText, ArrowRight, Filter } from 'lucide-react';
+import { Plus, MoreHorizontal, Eye, ArrowRight, Filter } from 'lucide-react';
 import { Quotation } from '@/types';
 import { format } from 'date-fns';
 
@@ -60,7 +60,7 @@ const QuotationsPage = () => {
       key: 'total',
       header: 'Total',
       cell: (quotation: Quotation) => (
-        <span className="font-medium">${quotation.grandTotal.toLocaleString()}</span>
+        <span className="font-medium">NPR {quotation.grandTotal.toLocaleString()}</span>
       ),
     },
     {
@@ -102,18 +102,12 @@ const QuotationsPage = () => {
             <DropdownMenuItem asChild>
               <Link to={`/quotations/${quotation.id}`}>
                 <Eye className="w-4 h-4 mr-2" />
-                View Details
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to={`/quotations/${quotation.id}/preview`}>
-                <FileText className="w-4 h-4 mr-2" />
-                Preview Quotation
+                View Quotation
               </Link>
             </DropdownMenuItem>
             {(quotation.status === 'sent' || quotation.status === 'accepted') && (
               <DropdownMenuItem asChild>
-                <Link to={`/quotations/${quotation.id}/convert`}>
+                <Link to={`/billing?quotation=${quotation.id}`}>
                   <ArrowRight className="w-4 h-4 mr-2" />
                   Convert to Invoice
                 </Link>

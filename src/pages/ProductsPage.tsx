@@ -6,7 +6,6 @@ import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { 
   Select,
   SelectContent,
@@ -20,15 +19,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter } from 'lucide-react';
+import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct, PRODUCT_CATEGORIES } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { LabelPrintDialog } from '@/components/LabelPrintDialog';
 
 const ProductsPage = () => {
   const { products, archiveProduct } = useData();
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showLabelPrint, setShowLabelPrint] = useState(false);
 
   const filteredProducts = products.filter(product => {
     if (typeFilter !== 'all' && product.type !== typeFilter) return false;
@@ -92,8 +93,8 @@ const ProductsPage = () => {
       header: 'Price',
       cell: (product: Product) => (
         <div>
-          <p className="font-medium">${product.sellingPrice.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground">Cost: ${product.costPrice.toLocaleString()}</p>
+          <p className="font-medium">NPR {product.sellingPrice.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">Cost: NPR {product.costPrice.toLocaleString()}</p>
         </div>
       ),
     },
@@ -152,12 +153,18 @@ const ProductsPage = () => {
         title="Products"
         description="Manage your hardware and software inventory"
         actions={
-          <Link to="/products/new">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowLabelPrint(true)}>
+              <Printer className="w-4 h-4 mr-2" />
+              Print Labels
             </Button>
-          </Link>
+            <Link to="/products/new">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -225,6 +232,12 @@ const ProductsPage = () => {
         searchKeys={['name', 'productCode', 'barcode', 'category']}
         pageSize={10}
         emptyMessage="No products found"
+      />
+
+      <LabelPrintDialog 
+        open={showLabelPrint} 
+        onOpenChange={setShowLabelPrint} 
+        products={products} 
       />
     </AppLayout>
   );
