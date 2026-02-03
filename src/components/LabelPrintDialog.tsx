@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Printer, Package } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct } from '@/types';
+import JsBarcode from 'jsbarcode';
 
 interface LabelPrintDialogProps {
   open: boolean;
@@ -27,7 +28,32 @@ interface SelectedProduct {
 
 export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDialogProps) => {
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [barcodeDataUrls, setBarcodeDataUrls] = useState<Record<string, string>>({});
+
+  // Generate barcode SVG data URLs when selected products change
+  useEffect(() => {
+    const newDataUrls: Record<string, string> = {};
+    selectedProducts.forEach(({ product }) => {
+      if (!barcodeDataUrls[product.barcode]) {
+        const canvas = document.createElement('canvas');
+        try {
+          JsBarcode(canvas, product.barcode, {
+            format: 'CODE128',
+            width: 2,
+            height: 40,
+            displayValue: false,
+            margin: 0,
+          });
+          newDataUrls[product.barcode] = canvas.toDataURL('image/png');
+        } catch (e) {
+          console.error('Barcode generation error:', e);
+        }
+      }
+    });
+    if (Object.keys(newDataUrls).length > 0) {
+      setBarcodeDataUrls(prev => ({ ...prev, ...newDataUrls }));
+    }
+  }, [selectedProducts]);
 
   const toggleProduct = (product: Product) => {
     const exists = selectedProducts.find(sp => sp.product.id === product.id);
@@ -48,11 +74,50 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
     return selectedProducts.some(sp => sp.product.id === productId);
   };
 
-  const handlePrint = () => {
-    const printContent = printRef.current;
-    if (!printContent) return;
+  const generateAllBarcodes = (): Record<string, string> => {
+    const allBarcodes: Record<string, string> = {};
+    selectedProducts.forEach(({ product }) => {
+      const canvas = document.createElement('canvas');
+      try {
+        JsBarcode(canvas, product.barcode, {
+          format: 'CODE128',
+          width: 2,
+          height: 50,
+          displayValue: false,
+          margin: 0,
+        });
+        allBarcodes[product.barcode] = canvas.toDataURL('image/png');
+      } catch (e) {
+        console.error('Barcode generation error:', e);
+      }
+    });
+    return allBarcodes;
+  };
 
-    const printWindow = window.open('', '', 'width=400,height=600');
+  const handlePrint = () => {
+    const allBarcodes = generateAllBarcodes();
+    
+    // Generate labels HTML
+    let labelsHtml = '<div class="labels-container">';
+    selectedProducts.forEach(({ product, quantity }) => {
+      for (let i = 0; i < quantity; i++) {
+        labelsHtml += `
+          <div class="label">
+            <div class="label-header">IT GADGET HUB</div>
+            <div class="product-name">${product.name}</div>
+            <div class="product-code">${product.productCode}</div>
+            <div class="barcode">
+              <img src="${allBarcodes[product.barcode]}" alt="barcode" style="max-width: 100%; height: 40px;" />
+            </div>
+            <div class="barcode-number">${product.barcode}</div>
+            <div class="price">NPR ${product.sellingPrice.toLocaleString()}</div>
+          </div>
+        `;
+      }
+    });
+    labelsHtml += '</div>';
+
+    const printWindow = window.open('', '', 'width=600,height=800');
     if (!printWindow) return;
 
     printWindow.document.write(`
@@ -72,7 +137,7 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
             .labels-container {
               display: flex;
               flex-wrap: wrap;
-              gap: 2mm;
+              gap: 4mm;
               padding: 5mm;
             }
             .label {
@@ -85,22 +150,25 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
               display: flex;
               flex-direction: column;
               justify-content: space-between;
+              align-items: center;
             }
             .label-header {
               text-align: center;
-              font-size: 6pt;
+              font-size: 7pt;
               font-weight: bold;
               color: #0f766e;
               border-bottom: 1px solid #0f766e;
               padding-bottom: 1mm;
               margin-bottom: 1mm;
+              width: 100%;
             }
             .product-name {
               font-size: 7pt;
               font-weight: bold;
               text-align: center;
-              line-height: 1.2;
-              margin-bottom: 1mm;
+              line-height: 1.1;
+              max-height: 3em;
+              overflow: hidden;
             }
             .product-code {
               font-size: 6pt;
@@ -109,13 +177,14 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
             }
             .barcode {
               text-align: center;
-              font-family: 'Libre Barcode 128', 'Libre Barcode 39', monospace;
-              font-size: 24pt;
-              letter-spacing: 2px;
               margin: 1mm 0;
             }
+            .barcode img {
+              max-width: 45mm;
+              height: 35px;
+            }
             .barcode-number {
-              font-size: 6pt;
+              font-size: 7pt;
               text-align: center;
               font-family: monospace;
               letter-spacing: 1px;
@@ -125,27 +194,26 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
               font-weight: bold;
               text-align: center;
               color: #0f766e;
-              margin-top: 1mm;
             }
             @media print {
               body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+              .label { border: none; }
             }
           </style>
         </head>
         <body>
-          ${printContent.innerHTML}
+          ${labelsHtml}
         </body>
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
-  };
-
-  const generateBarcodeDisplay = (barcode: string) => {
-    // Simple barcode representation using characters
-    return '*' + barcode + '*';
+    
+    // Wait for images to load then print
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }, 300);
   };
 
   return (
@@ -221,15 +289,15 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
                 </div>
               ) : (
                 <ScrollArea className="h-[360px]">
-                  <div ref={printRef} className="labels-container space-y-4">
+                  <div className="labels-container space-y-4">
                     {selectedProducts.map(({ product, quantity }) => (
                       Array.from({ length: Math.min(quantity, 5) }).map((_, idx) => (
                         <div 
                           key={`${product.id}-${idx}`}
-                          className="label bg-white border-2 border-dashed border-gray-300 rounded p-3"
-                          style={{ width: '200px', height: '120px' }}
+                          className="label bg-white border-2 border-dashed border-gray-300 rounded p-3 flex flex-col items-center justify-between"
+                          style={{ width: '200px', height: '130px' }}
                         >
-                          <div className="label-header text-xs font-bold text-teal-700 border-b border-teal-700 pb-1 mb-1 text-center">
+                          <div className="label-header text-xs font-bold text-teal-700 border-b border-teal-700 pb-1 mb-1 text-center w-full">
                             IT GADGET HUB
                           </div>
                           <div className="product-name text-xs font-bold text-center leading-tight line-clamp-2">
@@ -238,8 +306,16 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
                           <div className="product-code text-[10px] text-center text-gray-500">
                             {product.productCode}
                           </div>
-                          <div className="barcode text-center font-mono text-lg tracking-wider my-1">
-                            {generateBarcodeDisplay(product.barcode)}
+                          <div className="barcode text-center my-1">
+                            {barcodeDataUrls[product.barcode] ? (
+                              <img 
+                                src={barcodeDataUrls[product.barcode]} 
+                                alt="barcode" 
+                                className="h-8 mx-auto"
+                              />
+                            ) : (
+                              <div className="h-8 bg-gray-200 animate-pulse w-32 mx-auto rounded" />
+                            )}
                           </div>
                           <div className="barcode-number text-[9px] text-center font-mono">
                             {product.barcode}

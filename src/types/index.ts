@@ -221,6 +221,13 @@ export const PRODUCT_CATEGORIES = [
   'Accessories',
   'Cables',
   'Peripherals',
+  'Mobile Covers',
+  'Chargers',
+  'Wraps & Skins',
+  'Ambient Lights',
+  'Screen Protectors',
+  'Power Banks',
+  'Earphones & Headphones',
 ] as const;
 
 export type ProductCategory = typeof PRODUCT_CATEGORIES[number];
