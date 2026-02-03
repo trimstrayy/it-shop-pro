@@ -218,7 +218,7 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="w-5 h-5" />
@@ -229,16 +229,13 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0 overflow-hidden">
           {/* Product Selection */}
-          <div>
+          <div className="flex flex-col min-h-0">
             <h4 className="font-medium mb-3">Select Products</h4>
-            <ScrollArea className="h-[400px] border rounded-lg p-3">
+            <ScrollArea className="flex-1 border rounded-lg p-3">
               <div className="space-y-2">
                 {products.filter(p => p.status === 'active').map(product => {
-                  const stock = product.type === 'hardware' 
-                    ? (product as HardwareProduct).stockQuantity
-                    : (product as SoftwareProduct).licenseQuantity;
                   const selected = isSelected(product.id);
                   const selectedProduct = selectedProducts.find(sp => sp.product.id === product.id);
 
@@ -279,23 +276,23 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
           </div>
 
           {/* Label Preview */}
-          <div>
+          <div className="flex flex-col min-h-0">
             <h4 className="font-medium mb-3">Label Preview</h4>
-            <div className="border rounded-lg p-4 bg-muted/30 min-h-[400px]">
+            <div className="border rounded-lg p-4 bg-muted/30 flex-1 min-h-0 overflow-hidden">
               {selectedProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <Package className="w-12 h-12 mb-2 opacity-50" />
                   <p>Select products to preview labels</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[360px]">
-                  <div className="labels-container space-y-4">
+                <ScrollArea className="h-full max-h-[320px]">
+                  <div className="flex flex-col items-center gap-4 p-2">
                     {selectedProducts.map(({ product, quantity }) => (
-                      Array.from({ length: Math.min(quantity, 5) }).map((_, idx) => (
+                      Array.from({ length: Math.min(quantity, 3) }).map((_, idx) => (
                         <div 
                           key={`${product.id}-${idx}`}
-                          className="label bg-white border-2 border-dashed border-gray-300 rounded p-3 flex flex-col items-center justify-between"
-                          style={{ width: '200px', height: '130px' }}
+                          className="label bg-white border-2 border-dashed border-gray-300 rounded p-2 flex flex-col items-center justify-between shrink-0"
+                          style={{ width: '180px', height: '110px' }}
                         >
                           <div className="label-header text-xs font-bold text-teal-700 border-b border-teal-700 pb-1 mb-1 text-center w-full">
                             IT GADGET HUB
@@ -326,9 +323,9 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
                         </div>
                       ))
                     ))}
-                    {selectedProducts.some(sp => sp.quantity > 5) && (
+                    {selectedProducts.some(sp => sp.quantity > 3) && (
                       <p className="text-xs text-muted-foreground text-center py-2">
-                        (Preview shows max 5 labels per product. All selected labels will be printed.)
+                        (Preview shows max 3 labels. All selected labels will be printed.)
                       </p>
                     )}
                   </div>
