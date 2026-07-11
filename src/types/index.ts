@@ -1,5 +1,5 @@
 // User & Auth Types
-export type UserRole = 'admin' | 'sales' | 'inventory' | 'accountant';
+export type UserRole = 'admin' | 'sales' | 'inventory' | 'accountant' | 'technician';
 
 export interface User {
   id: string;
@@ -201,6 +201,109 @@ export interface ProductReport {
   totalSold: number;
   totalRevenue: number;
   totalProfit: number;
+}
+
+// Supabase-backed business entities
+export interface Customer {
+  id: string;
+  customerCode: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  lifetimeValue: number;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeviceBrand {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeviceModel {
+  id: string;
+  brandId: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeviceColor {
+  id: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface LaborRate {
+  id: string;
+  serviceName: string;
+  basePrice: number;
+  averageTimeRequiredMinutes: number;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RepairJobPhoto {
+  id: string;
+  jobId: string;
+  photoUrl: string;
+  caption?: string | null;
+  createdAt: Date;
+}
+
+export interface RepairJobUpdate {
+  id: string;
+  jobId: string;
+  loggedAt: Date;
+  note: string;
+  visibility: 'internal' | 'public';
+  statusChangedTo?: RepairJobStatus | null;
+  createdBy?: string | null;
+}
+
+export interface RepairJobPart {
+  id: string;
+  jobId: string;
+  productId: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  consumedAt: Date;
+  createdAt: Date;
+}
+
+export type RepairJobStatus = 'to_do' | 'in_progress' | 'waiting_for_parts' | 'quality_check' | 'ready' | 'delivered' | 'cancelled';
+export type RepairJobPriority = 'normal' | 'high' | 'urgent';
+
+export interface RepairJob {
+  id: string;
+  jobId: string;
+  customerId?: string | null;
+  deviceId?: string | null;
+  assignedTechId?: string | null;
+  status: RepairJobStatus;
+  priority: RepairJobPriority;
+  estimatedCost: number;
+  depositPaid: number;
+  issueSummary?: string | null;
+  intakeNotes?: string | null;
+  publicUpdate?: string | null;
+  qrToken: string;
+  readyNotifiedAt?: Date | null;
+  completedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  customer?: Customer;
+  technician?: User;
+  photos?: RepairJobPhoto[];
+  updates?: RepairJobUpdate[];
+  parts?: RepairJobPart[];
 }
 
 // Categories

@@ -1,20 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Package, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { User } from '@/types';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [demoAccounts, setDemoAccounts] = useState<User[]>([]);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const loadProfiles = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, email, name, role, avatar_url, created_at')
+        .order('role', { ascending: true });
+
+      if (data) {
+        setDemoAccounts(data.map(profile => ({
+          id: profile.id,
+          email: profile.email,
+          name: profile.name,
+          role: profile.role,
+          avatar: profile.avatar_url || undefined,
+          createdAt: new Date(profile.created_at),
+        })));
+      }
+    };
+
+    void loadProfiles();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,13 +47,13 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
-      if (success) {
+      const authenticatedUser = await login(email, password);
+      if (authenticatedUser) {
         toast({
           title: 'Welcome back!',
           description: 'You have successfully logged in.',
         });
-        navigate('/dashboard');
+        navigate(authenticatedUser.role === 'admin' || authenticatedUser.role === 'technician' ? '/lab' : '/dashboard');
       } else {
         setError('Invalid email or password');
       }
@@ -38,13 +63,6 @@ const LoginPage = () => {
       setIsLoading(false);
     }
   };
-
-  const demoAccounts = [
-    { email: 'admin@itshop.com', role: 'Admin', description: 'Full access to all features' },
-    { email: 'sales@itshop.com', role: 'Sales', description: 'Quotations & Billing' },
-    { email: 'inventory@itshop.com', role: 'Inventory', description: 'Products & Stock' },
-    { email: 'accountant@itshop.com', role: 'Accountant', description: 'Reports & Analytics' },
-  ];
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -108,22 +126,21 @@ const LoginPage = () => {
         <Card className="border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Demo Accounts</CardTitle>
-            <CardDescription className="text-xs">Use password: "password" for all accounts</CardDescription>
+            <CardDescription className="text-xs">These are loaded from Supabase profiles. Use the matching Supabase Auth password.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
             {demoAccounts.map((account) => (
               <button
-                key={account.email}
+                key={account.id}
                 type="button"
                 onClick={() => {
                   setEmail(account.email);
-                  setPassword('password');
                 }}
                 className="flex items-center justify-between p-3 text-left rounded-lg bg-muted/50 hover:bg-muted transition-colors"
               >
                 <div>
-                  <p className="text-sm font-medium text-foreground">{account.role}</p>
-                  <p className="text-xs text-muted-foreground">{account.description}</p>
+                  <p className="text-sm font-medium text-foreground capitalize">{account.role}</p>
+                  <p className="text-xs text-muted-foreground">{account.name}</p>
                 </div>
                 <span className="text-xs text-muted-foreground">{account.email}</span>
               </button>

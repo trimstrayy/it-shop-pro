@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
@@ -22,7 +23,6 @@ import {
   Line,
   Legend
 } from 'recharts';
-import { mockSalesReports, mockProductReports } from '@/data/mockData';
 import { Invoice, HardwareProduct, SoftwareProduct } from '@/types';
 import { format } from 'date-fns';
 
@@ -31,40 +31,88 @@ const COLORS = ['hsl(226, 71%, 40%)', 'hsl(173, 58%, 39%)', 'hsl(38, 92%, 50%)',
 const ReportsPage = () => {
   const { invoices, products } = useData();
 
-  // Calculate overall stats
-  const totalRevenue = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, i) => sum + i.grandTotal, 0);
+  const paidInvoices = invoices.filter(invoice => invoice.status === 'paid');
 
-  const totalProfit = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, invoice) => {
-      const invoiceProfit = invoice.items.reduce((itemSum, item) => {
+  const salesTrendData = useMemo(() => {
+    const grouped = paidInvoices.reduce<Record<string, { date: string; totalSales: number; totalProfit: number; invoiceCount: number; hardwareSales: number; softwareSales: number }>>((acc, invoice) => {
+      const dateKey = format(new Date(invoice.createdAt), 'yyyy-MM-dd');
+      if (!acc[dateKey]) {
+        acc[dateKey] = {
+          date: dateKey,
+          totalSales: 0,
+          totalProfit: 0,
+          invoiceCount: 0,
+          hardwareSales: 0,
+          softwareSales: 0,
+        };
+      }
+
+      const day = acc[dateKey];
+      day.totalSales += invoice.grandTotal;
+      day.invoiceCount += 1;
+
+      invoice.items.forEach(item => {
+        const product = products.find(productRow => productRow.id === item.productId);
         const profit = (item.unitPrice - item.costPrice) * item.quantity;
-        return itemSum + profit;
-      }, 0);
-      return sum + invoiceProfit;
-    }, 0);
-
-  const hardwareRevenue = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, invoice) => {
-      const hwItems = invoice.items.filter(item => {
-        const product = products.find(p => p.id === item.productId);
-        return product?.type === 'hardware';
+        day.totalProfit += profit;
+        if (product?.type === 'hardware') {
+          day.hardwareSales += item.lineTotal;
+        } else {
+          day.softwareSales += item.lineTotal;
+        }
       });
-      return sum + hwItems.reduce((s, i) => s + i.lineTotal, 0);
-    }, 0);
 
-  const softwareRevenue = invoices
-    .filter(i => i.status === 'paid')
-    .reduce((sum, invoice) => {
-      const swItems = invoice.items.filter(item => {
-        const product = products.find(p => p.id === item.productId);
-        return product?.type === 'software';
-      });
-      return sum + swItems.reduce((s, i) => s + i.lineTotal, 0);
+      return acc;
+    }, {});
+
+    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+  }, [paidInvoices, products]);
+
+  const productReportData = useMemo(() => {
+    return products.map(product => {
+      const soldItems = paidInvoices.flatMap(invoice => invoice.items).filter(item => item.productId === product.id);
+      const totalSold = soldItems.reduce((sum, item) => sum + item.quantity, 0);
+      const totalRevenue = soldItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const totalProfit = soldItems.reduce((sum, item) => sum + ((item.unitPrice - item.costPrice) * item.quantity), 0);
+
+      return {
+        productId: product.id,
+        productCode: product.productCode,
+        productName: product.name,
+        type: product.type,
+        totalSold,
+        totalRevenue,
+        totalProfit,
+      };
+    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [paidInvoices, products]);
+
+  // Calculate overall stats
+  const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.grandTotal, 0);
+
+  const totalProfit = paidInvoices.reduce((sum, invoice) => {
+    const invoiceProfit = invoice.items.reduce((itemSum, item) => {
+      const profit = (item.unitPrice - item.costPrice) * item.quantity;
+      return itemSum + profit;
     }, 0);
+    return sum + invoiceProfit;
+  }, 0);
+
+  const hardwareRevenue = paidInvoices.reduce((sum, invoice) => {
+    const hwItems = invoice.items.filter(item => {
+      const product = products.find(p => p.id === item.productId);
+      return product?.type === 'hardware';
+    });
+    return sum + hwItems.reduce((s, i) => s + i.lineTotal, 0);
+  }, 0);
+
+  const softwareRevenue = paidInvoices.reduce((sum, invoice) => {
+    const swItems = invoice.items.filter(item => {
+      const product = products.find(p => p.id === item.productId);
+      return product?.type === 'software';
+    });
+    return sum + swItems.reduce((s, i) => s + i.lineTotal, 0);
+  }, 0);
 
   // Pie chart data
   const typeDistribution = [
@@ -141,21 +189,21 @@ const ReportsPage = () => {
     {
       key: 'productCode',
       header: 'Code',
-      cell: (row: typeof mockProductReports[0]) => (
+      cell: (row: typeof productReportData[0]) => (
         <span className="font-mono text-sm text-primary">{row.productCode}</span>
       ),
     },
     {
       key: 'productName',
       header: 'Product',
-      cell: (row: typeof mockProductReports[0]) => (
+      cell: (row: typeof productReportData[0]) => (
         <span className="font-medium">{row.productName}</span>
       ),
     },
     {
       key: 'type',
       header: 'Type',
-      cell: (row: typeof mockProductReports[0]) => (
+      cell: (row: typeof productReportData[0]) => (
         <StatusBadge 
           status={row.type} 
           variant={row.type === 'hardware' ? 'info' : 'success'} 
@@ -165,19 +213,19 @@ const ReportsPage = () => {
     {
       key: 'totalSold',
       header: 'Units Sold',
-      cell: (row: typeof mockProductReports[0]) => <span>{row.totalSold}</span>,
+      cell: (row: typeof productReportData[0]) => <span>{row.totalSold}</span>,
     },
     {
       key: 'totalRevenue',
       header: 'Revenue',
-      cell: (row: typeof mockProductReports[0]) => (
+      cell: (row: typeof productReportData[0]) => (
         <span>${row.totalRevenue.toLocaleString()}</span>
       ),
     },
     {
       key: 'totalProfit',
       header: 'Profit',
-      cell: (row: typeof mockProductReports[0]) => (
+      cell: (row: typeof productReportData[0]) => (
         <span className="font-medium text-success">${row.totalProfit.toLocaleString()}</span>
       ),
     },
@@ -239,7 +287,7 @@ const ReportsPage = () => {
               <CardContent>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mockSalesReports}>
+                    <BarChart data={salesTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
                         dataKey="date" 
@@ -310,7 +358,7 @@ const ReportsPage = () => {
               <CardContent>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={mockSalesReports}>
+                    <LineChart data={salesTrendData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis 
                         dataKey="date" 
@@ -378,7 +426,7 @@ const ReportsPage = () => {
             </CardHeader>
             <CardContent>
               <DataTable
-                data={mockProductReports}
+                data={productReportData}
                 columns={productReportColumns}
                 searchable
                 searchPlaceholder="Search products..."

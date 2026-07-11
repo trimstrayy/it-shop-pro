@@ -278,14 +278,14 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
           {/* Label Preview */}
           <div className="flex flex-col min-h-0">
             <h4 className="font-medium mb-3">Label Preview</h4>
-            <div className="border rounded-lg p-4 bg-muted/30 flex-1 min-h-0 overflow-hidden">
+            <div className="border rounded-lg p-4 bg-muted/30 flex-1 min-h-0 overflow-hidden flex flex-col">
               {selectedProducts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <Package className="w-12 h-12 mb-2 opacity-50" />
                   <p>Select products to preview labels</p>
                 </div>
               ) : (
-                <ScrollArea className="h-full max-h-[320px]">
+                <ScrollArea className="h-full flex-1">
                   <div className="flex flex-col items-center gap-4 p-2">
                     {selectedProducts.map(({ product, quantity }) => (
                       Array.from({ length: Math.min(quantity, 3) }).map((_, idx) => (

@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, UserRole } from '@/types';
-import { mockUsers } from '@/data/mockData';
+import { supabase } from '@/lib/supabase';
+import { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
 }
@@ -27,28 +28,71 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    // Check for stored session
-    const storedUser = localStorage.getItem('itshop_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  const loadProfile = async (session: Session | null) => {
+    if (!session?.user) {
+      setUser(null);
+      return null;
     }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, name, role, avatar_url, created_at, updated_at')
+      .or(`auth_user_id.eq.${session.user.id},email.eq.${session.user.email}`)
+      .maybeSingle();
+
+    if (error || !data) {
+      const fallbackUser: User = {
+        id: session.user.id,
+        email: session.user.email || '',
+        name: session.user.email?.split('@')[0] || 'User',
+        role: 'sales',
+        createdAt: new Date(session.user.created_at),
+      };
+      setUser(fallbackUser);
+      return fallbackUser;
+    }
+
+    const mappedUser: User = {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      role: data.role,
+      avatar: data.avatar_url || undefined,
+      createdAt: new Date(data.created_at),
+    };
+
+    setUser(mappedUser);
+    return mappedUser;
+  };
+
+  useEffect(() => {
+    const initializeSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      await loadProfile(data.session);
+    };
+
+    initializeSession();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      await loadProfile(session);
+    });
+
+    return () => {
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Mock authentication - in production, this would call an API
-    const foundUser = mockUsers.find(u => u.email === email);
-    if (foundUser && password === 'password') { // Simple mock password
-      setUser(foundUser);
-      localStorage.setItem('itshop_user', JSON.stringify(foundUser));
-      return true;
+  const login = async (email: string, password: string): Promise<User | null> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.session) {
+      return null;
     }
-    return false;
+
+    return loadProfile(data.session);
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem('itshop_user');
+    void supabase.auth.signOut();
   };
 
   const hasPermission = (roles: UserRole[]): boolean => {

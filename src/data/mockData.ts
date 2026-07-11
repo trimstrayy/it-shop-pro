@@ -41,6 +41,27 @@ export const mockUsers: User[] = [
     role: 'accountant',
     createdAt: new Date('2024-04-01'),
   },
+  {
+    id: '5',
+    email: 'tech1@itshop.com',
+    name: 'Alex Technician',
+    role: 'technician',
+    createdAt: new Date('2024-05-01'),
+  },
+  {
+    id: '6',
+    email: 'tech2@itshop.com',
+    name: 'Maya Technician',
+    role: 'technician',
+    createdAt: new Date('2024-05-08'),
+  },
+  {
+    id: '7',
+    email: 'tech3@itshop.com',
+    name: 'Noah Technician',
+    role: 'technician',
+    createdAt: new Date('2024-05-15'),
+  },
 ];
 
 // Mock Products

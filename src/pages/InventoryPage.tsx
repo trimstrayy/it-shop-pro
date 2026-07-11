@@ -1,16 +1,74 @@
+import { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/stat-card';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, AlertTriangle, CheckCircle, XCircle, History } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Package, AlertTriangle, CheckCircle, XCircle, History, Plus } from 'lucide-react';
 import { HardwareProduct, SoftwareProduct, InventoryLog } from '@/types';
 import { format } from 'date-fns';
 
 const InventoryPage = () => {
-  const { products, inventoryLogs } = useData();
+  const { products, inventoryLogs, updateInventory } = useData();
+  const { user } = useAuth();
+
+  // Admin check — only users with the 'admin' role can update stock
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+  // State for the stock update dialog (admin only)
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<typeof products[0] | null>(null);
+  const [stockChangeAmount, setStockChangeAmount] = useState('');
+  const [updateNotes, setUpdateNotes] = useState('');
+  const [updateError, setUpdateError] = useState('');
+
+  const handleOpenUpdateDialog = (product: typeof products[0]) => {
+    if (!isAdmin) return; // Guard: should never be reachable for non-admins
+    setSelectedProduct(product);
+    setStockChangeAmount('');
+    setUpdateNotes('');
+    setUpdateError('');
+    setUpdateDialogOpen(true);
+  };
+
+  const handleStockUpdate = () => {
+    if (!isAdmin) return; // Guard: prevent any non-admin execution
+    if (!selectedProduct) return;
+
+    const amount = parseInt(stockChangeAmount, 10);
+    if (isNaN(amount) || amount === 0) {
+      setUpdateError('Please enter a valid non-zero quantity.');
+      return;
+    }
+
+    const currentQty =
+      selectedProduct.type === 'hardware'
+        ? (selectedProduct as HardwareProduct).stockQuantity
+        : (selectedProduct as SoftwareProduct).licenseQuantity;
+
+    if (currentQty + amount < 0) {
+      setUpdateError('Stock cannot go below zero.');
+      return;
+    }
+
+    updateInventory(
+      selectedProduct.id,
+      amount,
+      'purchase',
+      user?.id ?? 'unknown',
+      user?.name ?? 'Unknown User',
+      updateNotes || undefined,
+    );
+    setUpdateDialogOpen(false);
+    setSelectedProduct(null);
+  };
 
   // Calculate inventory stats
   const inStockProducts = products.filter(p => {
@@ -58,9 +116,9 @@ const InventoryPage = () => {
       key: 'type',
       header: 'Type',
       cell: (product: typeof products[0]) => (
-        <StatusBadge 
-          status={product.type} 
-          variant={product.type === 'hardware' ? 'info' : 'success'} 
+        <StatusBadge
+          status={product.type}
+          variant={product.type === 'hardware' ? 'info' : 'success'}
         />
       ),
     },
@@ -68,12 +126,13 @@ const InventoryPage = () => {
       key: 'stock',
       header: 'Stock/Licenses',
       cell: (product: typeof products[0]) => {
-        const qty = product.type === 'hardware' 
-          ? (product as HardwareProduct).stockQuantity 
-          : (product as SoftwareProduct).licenseQuantity;
-        
+        const qty =
+          product.type === 'hardware'
+            ? (product as HardwareProduct).stockQuantity
+            : (product as SoftwareProduct).licenseQuantity;
+
         const label = product.type === 'hardware' ? 'units' : 'licenses';
-        
+
         if (qty === 0) return <StatusBadge status="Out of Stock" variant="danger" />;
         if (qty <= 5) return <StatusBadge status={`${qty} ${label} - Low`} variant="warning" />;
         return <span className="font-medium">{qty} {label}</span>;
@@ -83,15 +142,36 @@ const InventoryPage = () => {
       key: 'status',
       header: 'Status',
       cell: (product: typeof products[0]) => {
-        const qty = product.type === 'hardware' 
-          ? (product as HardwareProduct).stockQuantity 
-          : (product as SoftwareProduct).licenseQuantity;
-        
+        const qty =
+          product.type === 'hardware'
+            ? (product as HardwareProduct).stockQuantity
+            : (product as SoftwareProduct).licenseQuantity;
+
         if (qty === 0) return <StatusBadge status="Out of Stock" variant="danger" />;
         if (qty <= 5) return <StatusBadge status="Low Stock" variant="warning" />;
         return <StatusBadge status="In Stock" variant="success" />;
       },
     },
+    // Admin-only "Update Stock" action column
+    ...(isAdmin
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            cell: (product: typeof products[0]) => (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleOpenUpdateDialog(product)}
+                className="flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Update Stock
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const logColumns = [
@@ -144,7 +224,7 @@ const InventoryPage = () => {
 
   return (
     <AppLayout>
-      <PageHeader 
+      <PageHeader
         title="Inventory"
         description="Monitor stock levels and inventory changes"
       />
@@ -199,12 +279,25 @@ const InventoryPage = () => {
                       <p className="font-medium text-sm">{product.name}</p>
                       <p className="text-xs text-muted-foreground">{product.productCode}</p>
                     </div>
-                    <span className="text-sm font-medium text-warning">
-                      {product.type === 'hardware' 
-                        ? `${(product as HardwareProduct).stockQuantity} units`
-                        : `${(product as SoftwareProduct).licenseQuantity} licenses`
-                      }
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-warning">
+                        {product.type === 'hardware'
+                          ? `${(product as HardwareProduct).stockQuantity} units`
+                          : `${(product as SoftwareProduct).licenseQuantity} licenses`}
+                      </span>
+                      {/* Admin-only quick update button in alert card */}
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleOpenUpdateDialog(product)}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Restock
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -229,7 +322,21 @@ const InventoryPage = () => {
                       <p className="font-medium text-sm">{product.name}</p>
                       <p className="text-xs text-muted-foreground">{product.productCode}</p>
                     </div>
-                    <StatusBadge status="Out of Stock" variant="danger" />
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status="Out of Stock" variant="danger" />
+                      {/* Admin-only quick restock button */}
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleOpenUpdateDialog(product)}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Restock
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -278,6 +385,72 @@ const InventoryPage = () => {
           />
         </CardContent>
       </Card>
+
+      {/* Admin-only: Stock Update Dialog — completely absent from DOM for non-admins */}
+      {isAdmin && (
+        <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Stock</DialogTitle>
+            </DialogHeader>
+
+            {selectedProduct && (
+              <div className="space-y-4 py-2">
+                <div>
+                  <p className="font-medium">{selectedProduct.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{selectedProduct.productCode}</p>
+                  <p className="text-sm mt-1">
+                    Current stock:{' '}
+                    <span className="font-semibold">
+                      {selectedProduct.type === 'hardware'
+                        ? `${(selectedProduct as HardwareProduct).stockQuantity} units`
+                        : `${(selectedProduct as SoftwareProduct).licenseQuantity} licenses`}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="stockChange">
+                    Quantity Change{' '}
+                    <span className="text-muted-foreground font-normal">(use negative to reduce)</span>
+                  </Label>
+                  <Input
+                    id="stockChange"
+                    type="number"
+                    placeholder="e.g. 50 or -10"
+                    value={stockChangeAmount}
+                    onChange={e => {
+                      setStockChangeAmount(e.target.value);
+                      setUpdateError('');
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="updateNotes">Notes (optional)</Label>
+                  <Input
+                    id="updateNotes"
+                    placeholder="e.g. New batch received from supplier"
+                    value={updateNotes}
+                    onChange={e => setUpdateNotes(e.target.value)}
+                  />
+                </div>
+
+                {updateError && (
+                  <p className="text-sm text-destructive">{updateError}</p>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setUpdateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleStockUpdate}>Confirm Update</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </AppLayout>
   );
 };

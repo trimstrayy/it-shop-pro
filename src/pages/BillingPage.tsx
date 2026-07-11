@@ -92,10 +92,15 @@ const BillingPage = () => {
       )
     : activeProducts;
 
-  const addItem = (product: Product) => {
-    const stock = product.type === 'hardware' 
+  // Helper to get available stock for any product
+  const getStock = (product: Product): number => {
+    return product.type === 'hardware'
       ? (product as HardwareProduct).stockQuantity
       : (product as SoftwareProduct).licenseQuantity;
+  };
+
+  const addItem = (product: Product) => {
+    const stock = getStock(product);
 
     if (stock === 0) {
       toast({
@@ -111,8 +116,8 @@ const BillingPage = () => {
     if (existingItem) {
       if (existingItem.quantity >= stock) {
         toast({
-          title: 'Insufficient Stock',
-          description: `Only ${stock} units available.`,
+          title: 'Stock Limit Reached',
+          description: `Only ${stock} unit${stock !== 1 ? 's' : ''} of "${product.name}" available.`,
           variant: 'destructive',
         });
         return;
@@ -154,10 +159,18 @@ const BillingPage = () => {
     setItems(items.map(item => {
       if (item.id === itemId) {
         const updatedItem = { ...item, ...updates };
+
+        // Clamp quantity to available stock as a hard backstop
+        if (updates.quantity !== undefined) {
+          const product = products.find(p => p.id === item.productId);
+          const stock = product ? getStock(product) : 0;
+          updatedItem.quantity = Math.min(Math.max(1, updatedItem.quantity), stock);
+        }
+
         updatedItem.lineTotal = calculateLineTotal(
-          updatedItem.quantity, 
-          updatedItem.unitPrice, 
-          updatedItem.taxPercent, 
+          updatedItem.quantity,
+          updatedItem.unitPrice,
+          updatedItem.taxPercent,
           updatedItem.discount
         );
         return updatedItem;
@@ -356,9 +369,7 @@ const BillingPage = () => {
                       </div>
                       <div className="max-h-64 overflow-y-auto space-y-1">
                         {filteredProducts.slice(0, 15).map(product => {
-                          const stock = product.type === 'hardware' 
-                            ? (product as HardwareProduct).stockQuantity
-                            : (product as SoftwareProduct).licenseQuantity;
+                          const stock = getStock(product);
                           return (
                             <button
                               key={product.id}
@@ -413,44 +424,64 @@ const BillingPage = () => {
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      {items.map(item => (
-                        <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                          <div className="flex-1">
-                            <p className="font-medium">{item.productName}</p>
-                            <p className="text-xs text-muted-foreground">{item.productCode}</p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
+                      {items.map(item => {
+                        const product = products.find(p => p.id === item.productId);
+                        const stock = product ? getStock(product) : 0;
+                        return (
+                          <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                            <div className="flex-1">
+                              <p className="font-medium">{item.productName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.productCode}
+                                <span className="ml-2 text-muted-foreground/70">
+                                  ({stock} in stock)
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => updateItem(item.id, { quantity: Math.max(1, item.quantity - 1) })}
+                                >
+                                  -
+                                </Button>
+                                <span className="w-8 text-center font-medium">{item.quantity}</span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={item.quantity >= stock}
+                                  onClick={() => {
+                                    if (item.quantity >= stock) {
+                                      toast({
+                                        title: 'Stock Limit Reached',
+                                        description: `Only ${stock} unit${stock !== 1 ? 's' : ''} of "${item.productName}" available.`,
+                                        variant: 'destructive',
+                                      });
+                                      return;
+                                    }
+                                    updateItem(item.id, { quantity: item.quantity + 1 });
+                                  }}
+                                >
+                                  +
+                                </Button>
+                              </div>
+                              <span className="w-28 text-right font-medium">NPR {item.lineTotal.toFixed(0)}</span>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
-                                onClick={() => updateItem(item.id, { quantity: Math.max(1, item.quantity - 1) })}
+                                className="h-8 w-8 text-destructive"
+                                onClick={() => removeItem(item.id)}
                               >
-                                -
-                              </Button>
-                              <span className="w-8 text-center font-medium">{item.quantity}</span>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => updateItem(item.id, { quantity: item.quantity + 1 })}
-                              >
-                                +
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
-                            <span className="w-28 text-right font-medium">NPR {item.lineTotal.toFixed(0)}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive"
-                              onClick={() => removeItem(item.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
