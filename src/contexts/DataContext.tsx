@@ -46,6 +46,12 @@ interface DataContextType {
   inventoryLogs: InventoryLog[];
   updateInventory: (productId: string, change: number, reason: InventoryLog['reason'], userId: string, userName: string, notes?: string) => void;
 
+  // Repair jobs
+  repairJobs: RepairJob[];
+  addRepairJob: (repairJob: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>) => RepairJob;
+  updateRepairJob: (id: string, updates: Partial<RepairJob>) => void;
+  convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode']) => Invoice;
+
   // Quotations
   quotations: Quotation[];
   addQuotation: (quotation: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>) => Quotation;
@@ -516,6 +522,80 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     setInventoryLogs(prev => [log, ...prev]);
   };
 
+  // Repair job functions
+  const addRepairJob = (repairJobData: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>): RepairJob => {
+    const now = new Date();
+    const newRepairJob: RepairJob = {
+      ...repairJobData,
+      id: `repair-${Date.now()}`,
+      jobId: `RJ-${String(Date.now()).slice(-6)}`,
+      qrToken: `qr-${Date.now()}`,
+      createdAt: now,
+      updatedAt: now,
+      status: repairJobData.status || 'to_do',
+    };
+
+    setRepairJobs(prev => [newRepairJob, ...prev]);
+    return newRepairJob;
+  };
+
+  const updateRepairJob = (id: string, updates: Partial<RepairJob>) => {
+    setRepairJobs(prev => prev.map(job =>
+      job.id === id ? { ...job, ...updates, updatedAt: new Date() } : job
+    ));
+  };
+
+  const convertRepairToInvoice = (repairJobId: string, paymentMode: Invoice['paymentMode']): Invoice => {
+    const repairJob = repairJobs.find(job => job.id === repairJobId);
+    if (!repairJob) throw new Error('Repair job not found');
+
+    const invoiceItems: InvoiceItem[] = [
+      {
+        id: `repair-item-${repairJob.id}`,
+        productId: `repair-service-${repairJob.id}`,
+        productCode: 'REPAIR-SVC',
+        productName: repairJob.issueSummary || 'Device Repair Service',
+        quantity: 1,
+        unitPrice: repairJob.estimatedCost,
+        costPrice: 0,
+        taxPercent: 0,
+        discount: 0,
+        lineTotal: repairJob.estimatedCost,
+      },
+      ...((repairJob.parts || []).map((part) => ({
+        id: `repair-part-${part.id}`,
+        productId: part.productId,
+        productCode: `PART-${part.productId.slice(-4)}`,
+        productName: `Repair Part: ${part.productId}`,
+        quantity: part.quantity,
+        unitPrice: part.unitCost,
+        costPrice: part.unitCost,
+        taxPercent: 0,
+        discount: 0,
+        lineTotal: part.totalCost,
+      } as InvoiceItem)))
+    ];
+
+    const invoice = addInvoice({
+      clientName: repairJob.customer?.name || 'Repair Customer',
+      clientEmail: repairJob.customer?.email || 'repair@example.com',
+      clientPhone: repairJob.customer?.phone || 'N/A',
+      clientAddress: repairJob.customer?.address || 'Repair intake',
+      items: invoiceItems,
+      subtotal: invoiceItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+      totalDiscount: 0,
+      totalTax: 0,
+      grandTotal: invoiceItems.reduce((sum, item) => sum + item.lineTotal, 0),
+      paymentMode,
+      status: 'paid',
+      createdBy: repairJob.assignedTechId || 'system',
+      paidAt: new Date(),
+    });
+
+    updateRepairJob(repairJobId, { status: 'delivered', completedAt: new Date() });
+    return invoice;
+  };
+
   // Quotation functions
   const addQuotation = (quotationData: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>): Quotation => {
     const now = new Date();
@@ -724,6 +804,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
   return (
     <DataContext.Provider value={{
+      customers,
+      laborRates,
+      repairJobs,
+      brands,
+      models,
+      colors,
       products,
       addProduct,
       updateProduct,
@@ -746,6 +832,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       assignDeliveryPerson,
       markDeliveryReturned,
       getDelivery,
+      addRepairJob,
+      updateRepairJob,
+      convertRepairToInvoice,
     }}>
       {children}
     </DataContext.Provider>

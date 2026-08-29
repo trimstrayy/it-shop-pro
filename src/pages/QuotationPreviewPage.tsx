@@ -42,45 +42,363 @@ const QuotationPreviewPage = () => {
     );
   }
 
-  const handlePrint = () => {
-    const printContent = previewRef.current;
-    if (!printContent) return;
+  const buildPrintableQuotation = () => {
+    const renderedItems = quotation.items.map((item, index) => `
+      <tr style="${index % 2 === 0 ? 'background:#f8fafc;' : 'background:#ffffff;'}">
+        <td style="padding:12px 16px;">${index + 1}</td>
+        <td style="padding:12px 16px; vertical-align:top;">
+          <div style="font-weight:600;">${item.productName}</div>
+          <div style="font-size:11px; color:#6b7280; margin-top:2px;">${item.productCode}</div>
+        </td>
+        <td style="padding:12px 16px; text-align:center; width:80px;">${item.quantity}</td>
+        <td style="padding:12px 16px; text-align:right; width:140px;">NPR ${item.unitPrice.toLocaleString()}</td>
+        <td style="padding:12px 16px; text-align:right; width:140px; font-weight:600;">NPR ${item.lineTotal.toLocaleString()}</td>
+      </tr>
+    `).join('');
 
-    const printWindow = window.open('', '', 'width=800,height=600');
-    if (!printWindow) return;
-
-    printWindow.document.write(`
+    return `
       <html>
         <head>
           <title>Quotation ${quotation.quotationNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; color: #1a1a1a; }
-            .quotation-preview { max-width: 800px; margin: 0 auto; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .company-logo { width: 60px; height: 60px; background: #0f766e; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
-            .title { color: #0f766e; font-size: 24px; font-weight: bold; text-align: right; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
-            .info-section h4 { color: #0f766e; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; }
-            .info-section p { margin: 4px 0; font-size: 14px; }
-            .quote-number { background: #f0fdfa; padding: 15px; margin-bottom: 30px; border-left: 4px solid #0f766e; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { background: #0f766e; color: white; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }
-            td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
-            .totals { margin-left: auto; width: 300px; }
-            .totals-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
-            .totals-row.grand { background: #0f766e; color: white; padding: 12px; font-weight: bold; }
-            .notes { background: #f9fafb; padding: 20px; margin-top: 30px; }
-            .notes h4 { margin-bottom: 10px; }
-            .footer { margin-top: 50px; display: flex; justify-content: space-between; }
-            .signature-line { border-top: 1px solid #000; width: 200px; padding-top: 5px; text-align: center; }
-            @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: Arial, sans-serif;
+              background: #ffffff;
+              color: #0f172a;
+              padding: 24px;
+            }
+            .quotation-preview {
+              max-width: 820px;
+              margin: 0 auto;
+              background: #ffffff;
+              color: #0f172a;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              margin-bottom: 32px;
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 16px;
+            }
+            .brand-mark {
+              width: 64px;
+              height: 64px;
+              border-radius: 10px;
+              background: #0f766e;
+              color: #ffffff;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 700;
+              font-size: 20px;
+            }
+            .brand-name {
+              margin: 0;
+              font-size: 22px;
+              line-height: 1.2;
+              font-weight: 700;
+              color: #0f766e;
+            }
+            .brand-tagline {
+              margin: 4px 0 0;
+              font-size: 13px;
+              color: #6b7280;
+            }
+            .title-block {
+              text-align: right;
+            }
+            .title-block h1 {
+              margin: 0;
+              font-size: 32px;
+              line-height: 1.1;
+              font-weight: 700;
+              color: #0f766e;
+              letter-spacing: 0.02em;
+            }
+            .title-block p {
+              margin: 6px 0 0;
+              font-size: 13px;
+              color: #6b7280;
+            }
+            .info-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 32px;
+              margin-bottom: 32px;
+            }
+            .info-section h4 {
+              margin: 0 0 10px;
+              font-size: 12px;
+              color: #0f766e;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+            }
+            .info-section .details {
+              font-size: 14px;
+              line-height: 1.6;
+              color: #1f2937;
+            }
+            .info-section .details p {
+              margin: 0;
+            }
+            .meta-bar {
+              background: #f0fdfa;
+              border-left: 4px solid #0f766e;
+              padding: 16px 20px;
+              margin-bottom: 24px;
+            }
+            .meta-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 16px;
+            }
+            .meta-label {
+              display: block;
+              font-size: 11px;
+              color: #6b7280;
+              text-transform: uppercase;
+              letter-spacing: 0.12em;
+              margin-bottom: 4px;
+            }
+            .meta-value {
+              font-size: 15px;
+              font-weight: 700;
+              color: #0f766e;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 32px;
+              border: 1px solid #e5e7eb;
+            }
+            thead th {
+              background: #0f766e;
+              color: #ffffff;
+              padding: 12px 16px;
+              text-align: left;
+              font-size: 12px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+            }
+            thead th:last-child,
+            td:last-child { text-align: right; }
+            tbody td {
+              padding: 12px 16px;
+              border-bottom: 1px solid #e5e7eb;
+              font-size: 14px;
+              color: #1f2937;
+              vertical-align: top;
+            }
+            .totals-wrap {
+              display: flex;
+              justify-content: flex-end;
+              margin-bottom: 32px;
+            }
+            .totals {
+              width: 300px;
+            }
+            .totals-row {
+              display: flex;
+              justify-content: space-between;
+              border-bottom: 1px solid #e5e7eb;
+              padding: 8px 0;
+              font-size: 14px;
+            }
+            .totals-row.grand {
+              background: #0f766e;
+              color: #ffffff;
+              padding: 12px 16px;
+              margin-top: 10px;
+              font-weight: 700;
+            }
+            .notes {
+              background: #f9fafb;
+              padding: 16px 18px;
+              margin-bottom: 24px;
+            }
+            .notes h4 {
+              margin: 0 0 10px;
+              font-size: 14px;
+              color: #374151;
+            }
+            .notes p {
+              margin: 0;
+              white-space: pre-line;
+              font-size: 13px;
+              color: #4b5563;
+            }
+            .footer {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 32px;
+              padding-top: 18px;
+              border-top: 1px solid #e5e7eb;
+            }
+            .signature {
+              text-align: center;
+              width: 190px;
+            }
+            .signature-line {
+              border-top: 1px solid #6b7280;
+              padding-top: 8px;
+              margin-top: 24px;
+            }
+            .signature-label {
+              font-size: 13px;
+              color: #6b7280;
+            }
+            .signature-name {
+              margin-top: 6px;
+              font-size: 11px;
+              color: #9ca3af;
+            }
+            .copyright {
+              text-align: center;
+              margin-top: 20px;
+              padding-top: 16px;
+              border-top: 1px solid #e5e7eb;
+              font-size: 11px;
+              color: #9ca3af;
+            }
+            @media print {
+              body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
-          ${printContent.innerHTML}
+          <div class="quotation-preview">
+            <div class="header">
+              <div class="brand">
+                <div class="brand-mark">ITG</div>
+                <div>
+                  <h2 class="brand-name">${COMPANY_INFO.name}</h2>
+                  <p class="brand-tagline">Your IT Solutions Partner</p>
+                </div>
+              </div>
+              <div class="title-block">
+                <h1>SALES QUOTATION</h1>
+                <p>Professional Quote</p>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-section">
+                <h4>From</h4>
+                <div class="details">
+                  <p style="font-weight:600;">${COMPANY_INFO.name}</p>
+                  <p>${COMPANY_INFO.address}</p>
+                  <p>ZIP: ${COMPANY_INFO.zipCode}</p>
+                  <p>Phone: ${COMPANY_INFO.phone}</p>
+                  <p>Email: ${COMPANY_INFO.email}</p>
+                </div>
+              </div>
+              <div class="info-section">
+                <h4>To</h4>
+                <div class="details">
+                  <p style="font-weight:600;">${quotation.clientName}</p>
+                  <p>${quotation.clientAddress}</p>
+                  <p>Phone: ${quotation.clientPhone}</p>
+                  <p>Email: ${quotation.clientEmail}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="meta-bar">
+              <div class="meta-row">
+                <div>
+                  <span class="meta-label">Quote Number</span>
+                  <div class="meta-value">${quotation.quotationNumber}</div>
+                </div>
+                <div style="text-align:center;">
+                  <span class="meta-label">Date</span>
+                  <div style="font-size:15px; font-weight:600;">${format(new Date(quotation.createdAt), 'MMM dd, yyyy')}</div>
+                </div>
+                <div style="text-align:right;">
+                  <span class="meta-label">Valid Until</span>
+                  <div style="font-size:15px; font-weight:600;">${format(new Date(quotation.validUntil), 'MMM dd, yyyy')}</div>
+                </div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:42%;">S.N.</th>
+                  <th style="width:42%;">Product Description</th>
+                  <th style="width:12%; text-align:center;">Qty</th>
+                  <th style="width:20%; text-align:right;">Unit Price</th>
+                  <th style="width:20%; text-align:right;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renderedItems}
+              </tbody>
+            </table>
+
+            <div class="totals-wrap">
+              <div class="totals">
+                <div class="totals-row">
+                  <span>Subtotal</span>
+                  <span>NPR ${quotation.subtotal.toLocaleString()}</span>
+                </div>
+                ${quotation.totalDiscount > 0 ? `
+                  <div class="totals-row">
+                    <span>Discount</span>
+                    <span style="color:#dc2626;">- NPR ${quotation.totalDiscount.toLocaleString()}</span>
+                  </div>
+                ` : ''}
+                <div class="totals-row">
+                  <span>Tax (VAT 13%)</span>
+                  <span>NPR ${quotation.totalTax.toLocaleString()}</span>
+                </div>
+                <div class="totals-row grand">
+                  <span>GRAND TOTAL</span>
+                  <span>NPR ${quotation.grandTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            ${quotation.notes ? `
+              <div class="notes">
+                <h4>Terms & Conditions</h4>
+                <p>${quotation.notes.replace(/\n/g, '<br/>')}</p>
+              </div>
+            ` : ''}
+
+            <div class="footer">
+              <div class="signature">
+                <div class="signature-line"></div>
+                <div class="signature-label">Authorized By</div>
+                <div class="signature-name">${COMPANY_INFO.name}</div>
+              </div>
+              <div class="signature">
+                <div class="signature-line"></div>
+                <div class="signature-label">Accepted By</div>
+                <div class="signature-name">${quotation.clientName}</div>
+              </div>
+            </div>
+
+            <div class="copyright">© ${new Date().getFullYear()} ${COMPANY_INFO.name}. Thank you for your business!</div>
+          </div>
         </body>
       </html>
-    `);
+    `;
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '', 'width=1000,height=900');
+    if (!printWindow) return;
+
+    printWindow.document.write(buildPrintableQuotation());
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();

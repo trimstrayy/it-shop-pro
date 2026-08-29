@@ -27,6 +27,7 @@ const shopNavigation = [
   { name: 'Products', href: '/products', icon: Package, roles: ['admin', 'inventory'] },
   { name: 'Inventory', href: '/inventory', icon: Warehouse, roles: ['admin', 'inventory'] },
   { name: 'Quotations', href: '/quotations', icon: FileText, roles: ['admin', 'sales'] },
+  { name: 'Repair Lab', href: '/lab', icon: Wrench, roles: ['admin', 'technician'] },
   { name: 'Billing', href: '/billing', icon: Receipt, roles: ['admin', 'sales'] },
   { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['admin', 'sales', 'inventory'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'accountant'] },

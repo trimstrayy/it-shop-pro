@@ -26,8 +26,9 @@ import { format } from 'date-fns';
 const BillingPage = () => {
   const [searchParams] = useSearchParams();
   const quotationId = searchParams.get('quotation');
+  const repairId = searchParams.get('repair');
   
-  const { products, invoices, addInvoice, quotations, convertToInvoice } = useData();
+  const { products, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice } = useData();
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -42,6 +43,7 @@ const BillingPage = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [fromQuotation, setFromQuotation] = useState<string | null>(null);
+  const [fromRepair, setFromRepair] = useState<string | null>(null);
 
   // Load quotation if converting
   useEffect(() => {
@@ -55,7 +57,6 @@ const BillingPage = () => {
           address: quotation.clientAddress,
         });
         
-        // Convert quotation items to invoice items
         const invoiceItems: InvoiceItem[] = quotation.items.map(item => {
           const product = products.find(p => p.id === item.productId);
           return {
@@ -74,6 +75,7 @@ const BillingPage = () => {
         
         setItems(invoiceItems);
         setFromQuotation(quotationId);
+        setFromRepair(null);
         
         toast({
           title: 'Quotation Loaded',
@@ -82,6 +84,56 @@ const BillingPage = () => {
       }
     }
   }, [quotationId, quotations, products]);
+
+  useEffect(() => {
+    if (repairId) {
+      const repairJob = repairJobs.find(job => job.id === repairId);
+      if (repairJob) {
+        setClientInfo({
+          name: repairJob.customer?.name || 'Repair Customer',
+          email: repairJob.customer?.email || '',
+          phone: repairJob.customer?.phone || '',
+          address: repairJob.customer?.address || '',
+        });
+
+        const repairItems: InvoiceItem[] = [
+          {
+            id: `repair-${repairJob.id}`,
+            productId: `repair-service-${repairJob.id}`,
+            productCode: 'REPAIR-SVC',
+            productName: repairJob.issueSummary || 'Device Repair Service',
+            quantity: 1,
+            unitPrice: repairJob.estimatedCost,
+            costPrice: 0,
+            taxPercent: 0,
+            discount: 0,
+            lineTotal: repairJob.estimatedCost,
+          },
+          ...((repairJob.parts || []).map(part => ({
+            id: `repair-part-${part.id}`,
+            productId: part.productId,
+            productCode: `PART-${part.productId.slice(-4)}`,
+            productName: `Repair Part (${part.productId})`,
+            quantity: part.quantity,
+            unitPrice: part.unitCost,
+            costPrice: part.unitCost,
+            taxPercent: 0,
+            discount: 0,
+            lineTotal: part.totalCost,
+          } as InvoiceItem)))
+        ];
+
+        setItems(repairItems);
+        setFromRepair(repairId);
+        setFromQuotation(null);
+
+        toast({
+          title: 'Repair Job Loaded',
+          description: `Preparing invoice for ${repairJob.jobId}`,
+        });
+      }
+    }
+  }, [repairId, repairJobs]);
 
   const activeProducts = products.filter(p => p.status === 'active');
   const filteredProducts = searchTerm 
@@ -213,6 +265,12 @@ const BillingPage = () => {
         title: 'Sale Complete!',
         description: `Invoice ${invoice.invoiceNumber} created from quotation. Inventory updated.`,
       });
+    } else if (fromRepair) {
+      const invoice = convertRepairToInvoice(fromRepair, paymentMode);
+      toast({
+        title: 'Repair Payment Complete!',
+        description: `Invoice ${invoice.invoiceNumber} created for repair completion.`,
+      });
     } else {
       const invoice = addInvoice({
         clientName: clientInfo.name,
@@ -236,11 +294,11 @@ const BillingPage = () => {
       });
     }
 
-    // Reset form
     setItems([]);
     setClientInfo({ name: '', email: '', phone: '', address: '' });
     setShowCheckout(false);
     setFromQuotation(null);
+    setFromRepair(null);
   };
 
   const recentInvoices = invoices.slice(0, 10);
