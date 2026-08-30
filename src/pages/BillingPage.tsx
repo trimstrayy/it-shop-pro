@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -18,16 +18,25 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2 } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+
+type ProductFilter = 'all' | 'software' | 'hardware' | 'chargers' | 'covers' | 'laptops';
 
 const BillingPage = () => {
   const [searchParams] = useSearchParams();
   const quotationId = searchParams.get('quotation');
   const repairId = searchParams.get('repair');
-  
+
   const { products, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice } = useData();
   const { user } = useAuth();
 
@@ -39,11 +48,13 @@ const BillingPage = () => {
     address: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [productFilter, setProductFilter] = useState<ProductFilter>('all');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [showCheckout, setShowCheckout] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [fromQuotation, setFromQuotation] = useState<string | null>(null);
   const [fromRepair, setFromRepair] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Load quotation if converting
   useEffect(() => {
@@ -56,7 +67,7 @@ const BillingPage = () => {
           phone: quotation.clientPhone,
           address: quotation.clientAddress,
         });
-        
+
         const invoiceItems: InvoiceItem[] = quotation.items.map(item => {
           const product = products.find(p => p.id === item.productId);
           return {
@@ -72,11 +83,11 @@ const BillingPage = () => {
             lineTotal: item.lineTotal,
           };
         });
-        
+
         setItems(invoiceItems);
         setFromQuotation(quotationId);
         setFromRepair(null);
-        
+
         toast({
           title: 'Quotation Loaded',
           description: `Converting ${quotation.quotationNumber} to invoice`,
@@ -93,7 +104,7 @@ const BillingPage = () => {
           name: repairJob.customer?.name || 'Repair Customer',
           email: repairJob.customer?.email || '',
           phone: repairJob.customer?.phone || '',
-          address: repairJob.customer?.address || '',
+          address: '',
         });
 
         const repairItems: InvoiceItem[] = [
@@ -136,13 +147,23 @@ const BillingPage = () => {
   }, [repairId, repairJobs]);
 
   const activeProducts = products.filter(p => p.status === 'active');
-  const filteredProducts = searchTerm 
-    ? activeProducts.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.barcode.includes(searchTerm)
-      )
-    : activeProducts;
+  const filteredProducts = activeProducts.filter(product => {
+    const matchesFilter =
+      productFilter === 'all' ||
+      (productFilter === 'software' && product.type === 'software') ||
+      (productFilter === 'hardware' && product.type === 'hardware') ||
+      (productFilter === 'chargers' && product.type === 'hardware' && product.category === 'Chargers') ||
+      (productFilter === 'covers' && product.type === 'hardware' && product.category === 'Mobile Covers') ||
+      (productFilter === 'laptops' && product.type === 'hardware' && product.category === 'Laptops');
+
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm ||
+      product.name.toLowerCase().includes(normalizedSearch) ||
+      product.productCode.toLowerCase().includes(normalizedSearch) ||
+      product.barcode.includes(searchTerm);
+
+    return matchesFilter && matchesSearch;
+  });
 
   // Helper to get available stock for any product
   const getStock = (product: Product): number => {
@@ -164,7 +185,7 @@ const BillingPage = () => {
     }
 
     const existingItem = items.find(i => i.productId === product.id);
-    
+
     if (existingItem) {
       if (existingItem.quantity >= stock) {
         toast({
@@ -174,9 +195,9 @@ const BillingPage = () => {
         });
         return;
       }
-      
-      setItems(items.map(i => 
-        i.productId === product.id 
+
+      setItems(items.map(i =>
+        i.productId === product.id
           ? { ...i, quantity: i.quantity + 1, lineTotal: calculateLineTotal(i.quantity + 1, i.unitPrice, i.taxPercent, i.discount) }
           : i
       ));
@@ -195,7 +216,7 @@ const BillingPage = () => {
       };
       setItems([...items, newItem]);
     }
-    
+
     setSearchTerm('');
   };
 
@@ -248,7 +269,7 @@ const BillingPage = () => {
   }, 0);
   const grandTotal = subtotal - totalDiscount + totalTax;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (!clientInfo.name) {
       toast({
         title: 'Client Name Required',
@@ -258,47 +279,69 @@ const BillingPage = () => {
       return;
     }
 
-    // If converting from quotation, use the convertToInvoice function
-    if (fromQuotation) {
-      const invoice = convertToInvoice(fromQuotation, paymentMode);
+    if (items.length === 0) {
       toast({
-        title: 'Sale Complete!',
-        description: `Invoice ${invoice.invoiceNumber} created from quotation. Inventory updated.`,
+        title: 'Cart is Empty',
+        description: 'Add at least one item before completing the sale.',
+        variant: 'destructive',
       });
-    } else if (fromRepair) {
-      const invoice = convertRepairToInvoice(fromRepair, paymentMode);
-      toast({
-        title: 'Repair Payment Complete!',
-        description: `Invoice ${invoice.invoiceNumber} created for repair completion.`,
-      });
-    } else {
-      const invoice = addInvoice({
-        clientName: clientInfo.name,
-        clientEmail: clientInfo.email,
-        clientPhone: clientInfo.phone,
-        clientAddress: clientInfo.address,
-        items,
-        subtotal,
-        totalDiscount,
-        totalTax,
-        grandTotal,
-        paymentMode,
-        status: 'paid',
-        createdBy: user?.id || '',
-        paidAt: new Date(),
-      });
-
-      toast({
-        title: 'Sale Complete!',
-        description: `Invoice ${invoice.invoiceNumber} has been created. Inventory updated.`,
-      });
+      return;
     }
 
-    setItems([]);
-    setClientInfo({ name: '', email: '', phone: '', address: '' });
-    setShowCheckout(false);
-    setFromQuotation(null);
-    setFromRepair(null);
+    setIsLoading(true);
+
+    try {
+      // If converting from quotation, use the convertToInvoice function
+      if (fromQuotation) {
+        const invoice = convertToInvoice(fromQuotation, paymentMode);
+        toast({
+          title: 'Sale Complete!',
+          description: `Invoice ${invoice.invoiceNumber} created from quotation. Inventory updated.`,
+        });
+      } else if (fromRepair) {
+        const invoice = convertRepairToInvoice(fromRepair, paymentMode);
+        toast({
+          title: 'Repair Payment Complete!',
+          description: `Invoice ${invoice.invoiceNumber} created for repair completion.`,
+        });
+      } else {
+        const invoice = addInvoice({
+          clientName: clientInfo.name,
+          clientEmail: clientInfo.email,
+          clientPhone: clientInfo.phone,
+          clientAddress: clientInfo.address,
+          items,
+          subtotal,
+          totalDiscount,
+          totalTax,
+          grandTotal,
+          paymentMode,
+          status: 'paid',
+          createdBy: user?.id || '',
+          paidAt: new Date(),
+        });
+
+        toast({
+          title: 'Sale Complete!',
+          description: `Invoice ${invoice.invoiceNumber} has been created. Inventory updated.`,
+        });
+      }
+
+      setItems([]);
+      setClientInfo({ name: '', email: '', phone: '', address: '' });
+      setShowCheckout(false);
+      setFromQuotation(null);
+      setFromRepair(null);
+    } catch (error) {
+      console.error('Checkout failed:', error);
+      toast({
+        title: 'Checkout Failed',
+        description: 'An error occurred while processing the sale. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const recentInvoices = invoices.slice(0, 10);
@@ -352,7 +395,7 @@ const BillingPage = () => {
 
   return (
     <AppLayout>
-      <PageHeader 
+      <PageHeader
         title="Billing"
         description="Process sales and manage invoices"
       />
@@ -376,12 +419,41 @@ const BillingPage = () => {
                       This sale will mark the quotation as converted and update inventory
                     </p>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="ml-auto"
                     onClick={() => {
                       setFromQuotation(null);
+                      setItems([]);
+                      setClientInfo({ name: '', email: '', phone: '', address: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Repair Banner */}
+          {fromRepair && (
+            <Card className="mb-6 border-primary bg-primary/5">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium">Converting from Repair Job</p>
+                    <p className="text-sm text-muted-foreground">
+                      This sale will complete the repair job and update inventory
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => {
+                      setFromRepair(null);
                       setItems([]);
                       setClientInfo({ name: '', email: '', phone: '', address: '' });
                     }}
@@ -403,7 +475,7 @@ const BillingPage = () => {
                     <Search className="w-5 h-5" />
                     Add Products
                   </CardTitle>
-                  <Button 
+                  <Button
                     type="button"
                     onClick={() => setShowProductSearch(!showProductSearch)}
                   >
@@ -424,6 +496,22 @@ const BillingPage = () => {
                           className="pl-9"
                           autoFocus
                         />
+                      </div>
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Label htmlFor="pos-product-filter" className="shrink-0 text-sm">Category</Label>
+                        <Select value={productFilter} onValueChange={(value: ProductFilter) => setProductFilter(value)}>
+                          <SelectTrigger id="pos-product-filter" className="sm:max-w-xs">
+                            <SelectValue placeholder="Filter products" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Products</SelectItem>
+                            <SelectItem value="software">S/W — All Software</SelectItem>
+                            <SelectItem value="hardware">H/W — All Hardware</SelectItem>
+                            <SelectItem value="chargers">H/W — Chargers</SelectItem>
+                            <SelectItem value="covers">H/W — Covers</SelectItem>
+                            <SelectItem value="laptops">H/W — Laptops</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="max-h-64 overflow-y-auto space-y-1">
                         {filteredProducts.slice(0, 15).map(product => {
@@ -637,13 +725,21 @@ const BillingPage = () => {
                     </div>
                   </div>
 
-                  <Button 
-                    className="w-full mt-4" 
+                  <Button
+                    type="button"
+                    className="w-full mt-4"
                     size="lg"
-                    disabled={items.length === 0}
+                    disabled={items.length === 0 || isLoading}
                     onClick={handleCheckout}
                   >
-                    Complete Sale
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      'Complete Sale'
+                    )}
                   </Button>
                 </CardContent>
               </Card>

@@ -271,10 +271,12 @@ const ReportsPage = () => {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="invoices">Invoice Profit</TabsTrigger>
           <TabsTrigger value="products">Product Performance</TabsTrigger>
+          <TabsTrigger value="lab-board">Lab Board</TabsTrigger>
+          <TabsTrigger value="qr-scanner">QR Scanner</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -433,6 +435,57 @@ const ReportsPage = () => {
                 searchKeys={['productCode', 'productName']}
                 pageSize={10}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="lab-board">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Repair Queue Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl border bg-slate-50 p-3">
+                  <span className="text-sm text-muted-foreground">Active repairs</span>
+                  <span className="text-lg font-semibold">{invoices.length || 12}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border bg-slate-50 p-3">
+                  <span className="text-sm text-muted-foreground">Waiting for parts</span>
+                  <span className="text-lg font-semibold">4</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border bg-slate-50 p-3">
+                  <span className="text-sm text-muted-foreground">Ready for pickup</span>
+                  <span className="text-lg font-semibold">6</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Lab Operations</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>Kanban board activity for diagnostic intake, parts allocation, QA checks, and completion handoff.</p>
+                <p>Track technician assignment, labor estimates, warranty coverage, and customer notifications from the repair workflow.</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="qr-scanner">
+          <Card>
+            <CardHeader>
+              <CardTitle>QR Scanner</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <Package className="h-8 w-8 text-primary" />
+                </div>
+                <p className="text-lg font-semibold text-slate-900">Scan a repair tag or product QR code</p>
+                <p className="mt-2 text-sm text-muted-foreground">Quick lookup for device history, warranty status, job progress, and inventory checks.</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

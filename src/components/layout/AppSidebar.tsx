@@ -10,51 +10,51 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  ArrowRightLeft,
   Wrench,
-  QrCode,
 } from 'lucide-react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { UserRole } from '@/types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
-const shopNavigation = [
+const navigation = [
+  { name: 'Billing', href: '/billing', icon: Receipt, roles: ['admin', 'sales'] },
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'sales', 'inventory', 'accountant'] },
   { name: 'Products', href: '/products', icon: Package, roles: ['admin', 'inventory'] },
   { name: 'Inventory', href: '/inventory', icon: Warehouse, roles: ['admin', 'inventory'] },
   { name: 'Quotations', href: '/quotations', icon: FileText, roles: ['admin', 'sales'] },
   { name: 'Repair Lab', href: '/lab', icon: Wrench, roles: ['admin', 'technician'] },
-  { name: 'Billing', href: '/billing', icon: Receipt, roles: ['admin', 'sales'] },
   { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['admin', 'sales', 'inventory'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'accountant'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
 ];
 
-const labNavigation = [
-  { name: 'Lab Board', href: '/lab', icon: Wrench, roles: ['admin', 'technician'] },
-  { name: 'QR Scanner', href: '/lab', icon: QrCode, roles: ['admin', 'technician'] },
-];
-
 export const AppSidebar = () => {
   const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
-  const isLabSection = location.pathname.startsWith('/lab') || user?.role === 'technician';
-  const filteredNavigation = (isLabSection ? labNavigation : shopNavigation).filter(item =>
+  const filteredNavigation = navigation.filter(item =>
     hasPermission(item.roles as UserRole[])
   );
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
-
-  const showSwitcher = user?.role === 'admin';
 
   return (
     <aside
@@ -71,9 +71,6 @@ export const AppSidebar = () => {
             </div>
             <div className="min-w-0">
               <p className="font-bold text-base truncate">IT Shop Manager</p>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-sidebar-foreground/60 truncate">
-                {isLabSection ? 'Lab Section' : 'Shop Section'}
-              </p>
             </div>
           </div>
         )}
@@ -86,30 +83,6 @@ export const AppSidebar = () => {
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </Button>
       </div>
-
-      {showSwitcher && (
-        <div className={cn('px-4', collapsed ? 'pt-2' : 'pt-4')}>
-          <Button
-            variant="outline"
-            size={collapsed ? 'icon' : 'default'}
-            className={cn(
-              'border-sidebar-border bg-sidebar-accent/40 text-sidebar-accent-foreground hover:bg-sidebar-accent',
-              collapsed ? 'w-10 h-10' : 'w-full justify-between'
-            )}
-            onClick={() => navigate(isLabSection ? '/dashboard' : '/lab')}
-          >
-            <span className="flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4" />
-              {!collapsed && <span>Switch to {isLabSection ? 'IT Shop' : 'Lab'}</span>}
-            </span>
-            {!collapsed && (
-              <span className="text-[11px] uppercase tracking-[0.2em] text-sidebar-foreground/60">
-                Admin
-              </span>
-            )}
-          </Button>
-        </div>
-      )}
 
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
         {filteredNavigation.map((item) => {
@@ -146,14 +119,31 @@ export const AppSidebar = () => {
             </div>
           )}
           {!collapsed && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={logout}
-              className="text-sidebar-foreground hover:bg-sidebar-accent flex-shrink-0"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-sidebar-foreground hover:bg-sidebar-accent flex-shrink-0"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Log out?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You will be signed out from this workspace. This action only proceeds after you confirm.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction asChild>
+                    <Button type="button" variant="default" onClick={logout}>Log out</Button>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </div>

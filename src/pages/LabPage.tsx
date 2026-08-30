@@ -118,7 +118,7 @@ const initialJobs: RepairJobCard[] = [
     priority: 'Normal',
     note: 'Waiting for OEM camera module from distributor.',
     receivedAt: '2026-08-28',
-    warrantyStatus: 'In Warranty',
+    warrantyStatus: 'In Warranty' as RepairJobCard['warrantyStatus'],
     warrantyEnds: '2027-01-28',
     customerNotified: true,
   },
@@ -223,7 +223,7 @@ const LabPage = () => {
       priority: form.priority,
       note: form.notes || 'Repair intake created and awaiting approval.',
       receivedAt: form.receivedDate,
-      warrantyStatus: form.warrantyStatus,
+      warrantyStatus: form.warrantyStatus as RepairJobCard['warrantyStatus'],
       warrantyEnds: form.warrantyEnds || '—',
       customerNotified: false,
     };
@@ -610,7 +610,7 @@ const LabPage = () => {
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6">
+          <div className="mt-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6">
             <Card className="border-border/70 bg-white/90 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { 
   Product, 
   Quotation, 
@@ -38,6 +38,7 @@ interface DataContextType {
   addProduct: (product: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>) => Product;
   updateProduct: (id: string, updates: Partial<Product>) => void;
   archiveProduct: (id: string) => void;
+  deleteProduct: (id: string) => void;
   getProduct: (id: string) => Product | undefined;
   getProductByCode: (code: string) => Product | undefined;
   getProductByBarcode: (barcode: string) => Product | undefined;
@@ -47,7 +48,6 @@ interface DataContextType {
   updateInventory: (productId: string, change: number, reason: InventoryLog['reason'], userId: string, userName: string, notes?: string) => void;
 
   // Repair jobs
-  repairJobs: RepairJob[];
   addRepairJob: (repairJob: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>) => RepairJob;
   updateRepairJob: (id: string, updates: Partial<RepairJob>) => void;
   convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode']) => Invoice;
@@ -457,6 +457,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     updateProduct(id, { status: 'inactive' });
   };
 
+  const deleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(product => product.id !== id));
+  };
+
   const getProduct = (id: string) => products.find(p => p.id === id);
   const getProductByCode = (code: string) => products.find(p => p.productCode === code);
   const getProductByBarcode = (barcode: string) => products.find(p => p.barcode === barcode);
@@ -580,7 +584,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       clientName: repairJob.customer?.name || 'Repair Customer',
       clientEmail: repairJob.customer?.email || 'repair@example.com',
       clientPhone: repairJob.customer?.phone || 'N/A',
-      clientAddress: repairJob.customer?.address || 'Repair intake',
+      clientAddress: 'Repair intake',
       items: invoiceItems,
       subtotal: invoiceItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
       totalDiscount: 0,
@@ -814,6 +818,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       addProduct,
       updateProduct,
       archiveProduct,
+      deleteProduct,
       getProduct,
       getProductByCode,
       getProductByBarcode,

@@ -19,13 +19,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer } from 'lucide-react';
+import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer, Trash2 } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct, PRODUCT_CATEGORIES } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { LabelPrintDialog } from '@/components/LabelPrintDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const ProductsPage = () => {
-  const { products, archiveProduct } = useData();
+  const { products, archiveProduct, deleteProduct } = useData();
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -43,6 +54,15 @@ const ProductsPage = () => {
     toast({
       title: 'Product Archived',
       description: `${product.name} has been archived.`,
+    });
+  };
+
+  const handleDelete = (product: Product) => {
+    deleteProduct(product.id);
+    toast({
+      title: 'Product Removed',
+      description: `${product.name} has been permanently removed.`,
+      variant: 'destructive',
     });
   };
 
@@ -133,13 +153,51 @@ const ProductsPage = () => {
                 Edit Product
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => handleArchive(product)}
-              className="text-destructive"
-            >
-              <Archive className="w-4 h-4 mr-2" />
-              Archive
-            </DropdownMenuItem>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-warning-foreground">
+                  <Archive className="w-4 h-4 mr-2" />
+                  Archive
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Archive product?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will mark {product.name} as inactive. This action requires your confirmation.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction asChild>
+                    <Button type="button" variant="default" onClick={() => handleArchive(product)}>Confirm</Button>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(event) => event.preventDefault()} className="text-destructive">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove Product
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this product?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently remove {product.name} from the inventory. This action cannot be undone unless you restore it from a backup.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction asChild>
+                    <Button type="button" variant="destructive" onClick={() => handleDelete(product)}>Delete</Button>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </DropdownMenuContent>
         </DropdownMenu>
       ),

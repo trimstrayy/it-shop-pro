@@ -55,19 +55,29 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
     }
   }, [selectedProducts]);
 
+  const getMaxQuantity = (product: Product) => {
+    if (product.type === 'hardware') {
+      return Math.max(1, (product as HardwareProduct).stockQuantity || 0);
+    }
+    return Math.max(1, (product as SoftwareProduct).licenseQuantity || 0);
+  };
+
   const toggleProduct = (product: Product) => {
     const exists = selectedProducts.find(sp => sp.product.id === product.id);
     if (exists) {
       setSelectedProducts(prev => prev.filter(sp => sp.product.id !== product.id));
     } else {
-      setSelectedProducts(prev => [...prev, { product, quantity: 1 }]);
+      setSelectedProducts(prev => [...prev, { product, quantity: getMaxQuantity(product) }]);
     }
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
-    setSelectedProducts(prev => prev.map(sp => 
-      sp.product.id === productId ? { ...sp, quantity: Math.max(1, quantity) } : sp
-    ));
+    setSelectedProducts(prev => prev.map(sp => {
+      if (sp.product.id !== productId) return sp;
+
+      const maxQuantity = getMaxQuantity(sp.product);
+      return { ...sp, quantity: Math.min(maxQuantity, Math.max(1, quantity)) };
+    }));
   };
 
   const isSelected = (productId: string) => {
@@ -238,6 +248,7 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
                 {products.filter(p => p.status === 'active').map(product => {
                   const selected = isSelected(product.id);
                   const selectedProduct = selectedProducts.find(sp => sp.product.id === product.id);
+                  const maxQuantity = getMaxQuantity(product);
 
                   return (
                     <div 
@@ -262,6 +273,7 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
                           <Input
                             type="number"
                             min="1"
+                            max={maxQuantity}
                             value={selectedProduct?.quantity || 1}
                             onChange={(e) => updateQuantity(product.id, parseInt(e.target.value) || 1)}
                             className="w-16 h-8 text-center"

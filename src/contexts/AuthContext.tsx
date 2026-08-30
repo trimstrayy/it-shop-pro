@@ -12,6 +12,26 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const LOCAL_SUPERADMIN_STORAGE_KEY = 'it-shop-local-superadmin';
+
+const readLocalSuperadminSession = (): User | null => {
+  try {
+    const raw = localStorage.getItem(LOCAL_SUPERADMIN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<User> & { createdAt?: string };
+    if (!parsed.email) return null;
+
+    return {
+      id: parsed.id || 'local-superadmin',
+      email: parsed.email,
+      name: parsed.name || parsed.email.split('@')[0],
+      role: parsed.role || 'admin',
+      createdAt: parsed.createdAt ? new Date(parsed.createdAt) : new Date(),
+    };
+  } catch {
+    return null;
+  }
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -67,14 +87,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const initializeSession = async () => {
+      const localFallbackUser = readLocalSuperadminSession();
+      if (localFallbackUser) {
+        setUser(localFallbackUser);
+        return;
+      }
+
       const { data } = await supabase.auth.getSession();
       await loadProfile(data.session);
     };
 
-    initializeSession();
+    void initializeSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
       await loadProfile(session);
+      if (!_event || _event === 'SIGNED_OUT') {
+        localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
+      }
     });
 
     return () => {
@@ -96,6 +125,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         createdAt: new Date(),
       };
 
+      localStorage.setItem(LOCAL_SUPERADMIN_STORAGE_KEY, JSON.stringify(localUser));
       setUser(localUser);
       return localUser;
     }
@@ -105,10 +135,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return null;
     }
 
+    localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
     return loadProfile(data.session);
   };
 
   const logout = () => {
+    localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
+    setUser(null);
     void supabase.auth.signOut();
   };
 

@@ -41,7 +41,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/dashboard" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DashboardPage /></AccessGate>} />
+              <Route path="/billing" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingPage /></AccessGate>} />
               <Route path="/products" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductsPage /></AccessGate>} />
               <Route path="/products/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
               <Route path="/products/:id/edit" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
@@ -49,7 +49,7 @@ const App = () => (
               <Route path="/quotations" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationsPage /></AccessGate>} />
               <Route path="/quotations/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationFormPage /></AccessGate>} />
               <Route path="/quotations/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationPreviewPage /></AccessGate>} />
-              <Route path="/billing" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingPage /></AccessGate>} />
+              <Route path="/dashboard" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DashboardPage /></AccessGate>} />
               <Route path="/deliveries" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DeliveriesPage /></AccessGate>} />
               <Route path="/reports" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ReportsPage /></AccessGate>} />
               <Route path="/settings" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><SettingsPage /></AccessGate>} />

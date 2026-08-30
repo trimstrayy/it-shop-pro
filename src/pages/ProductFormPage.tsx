@@ -20,6 +20,17 @@ import { Switch } from '@/components/ui/switch';
 import { PRODUCT_CATEGORIES, ProductType, LicenseType, HardwareProduct, SoftwareProduct } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const ProductFormPage = () => {
   const navigate = useNavigate();
@@ -354,9 +365,27 @@ const ProductFormPage = () => {
 
           {/* Submit */}
           <div className="flex justify-end gap-4">
-            <Button type="button" variant="outline" onClick={() => navigate('/products')}>
-              Cancel
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You have unsaved changes. This action will exit the form and all current edits will be lost unless you confirm.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                  <AlertDialogAction asChild>
+                    <Button type="button" variant="destructive" onClick={() => navigate('/products')}>Discard</Button>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button type="submit">
               {isEditing ? 'Update Product' : 'Create Product'}
             </Button>
