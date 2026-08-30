@@ -64,12 +64,20 @@ interface DataContextType {
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   cancelInvoice: (id: string) => void;
 
+  // Data loading state
+  isLoading: boolean;
+  error: string | null;
+
   // Deliveries
   deliveries: Delivery[];
   updateDeliveryStage: (id: string, stage: DeliveryStage, updatedBy: string, notes?: string, location?: string) => void;
   assignDeliveryPerson: (id: string, deliveryPerson: DeliveryPerson) => void;
   markDeliveryReturned: (id: string, updatedBy: string, notes?: string) => void;
   getDelivery: (id: string) => Delivery | undefined;
+  deliveryPeople: DeliveryPerson[];
+  addDeliveryPerson: (deliveryPerson: Omit<DeliveryPerson, 'id'>) => DeliveryPerson;
+  assignDeliveryPeople: (ids: string[], deliveryPerson: DeliveryPerson) => void;
+  unassignDeliveryPerson: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -98,48 +106,55 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [deliveryPeople, setDeliveryPeople] = useState<DeliveryPerson[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [
-        customersResult,
-        brandsResult,
-        modelsResult,
-        colorsResult,
-        laborRatesResult,
-        productsResult,
-        inventoryLogsResult,
-        quotationsResult,
-        quotationItemsResult,
-        invoicesResult,
-        invoiceItemsResult,
-        deliveriesResult,
-        deliveryPeopleResult,
-        trackingEventsResult,
-        repairJobsResult,
-        repairPhotosResult,
-        repairUpdatesResult,
-        repairPartsResult,
-      ] = await Promise.all([
-        supabase.from('customers').select('*').order('created_at', { ascending: false }),
-        supabase.from('device_brands').select('*').order('name'),
-        supabase.from('device_models').select('*').order('name'),
-        supabase.from('device_colors').select('*').order('name'),
-        supabase.from('labor_rates').select('*').order('service_name'),
-        supabase.from('products').select('*').order('created_at', { ascending: false }),
-        supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }),
-        supabase.from('quotations').select('*').order('created_at', { ascending: false }),
-        supabase.from('quotation_items').select('*').order('created_at', { ascending: false }),
-        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
-        supabase.from('invoice_items').select('*').order('created_at', { ascending: false }),
-        supabase.from('deliveries').select('*').order('created_at', { ascending: false }),
-        supabase.from('delivery_people').select('*'),
-        supabase.from('delivery_tracking_events').select('*').order('timestamp', { ascending: false }),
-        supabase.from('repair_jobs').select('*').order('created_at', { ascending: false }),
-        supabase.from('repair_job_photos').select('*').order('created_at', { ascending: false }),
-        supabase.from('repair_job_updates').select('*').order('logged_at', { ascending: false }),
-        supabase.from('repair_job_parts').select('*').order('created_at', { ascending: false }),
-      ]);
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const [
+          customersResult,
+          brandsResult,
+          modelsResult,
+          colorsResult,
+          laborRatesResult,
+          productsResult,
+          inventoryLogsResult,
+          quotationsResult,
+          quotationItemsResult,
+          invoicesResult,
+          invoiceItemsResult,
+          deliveriesResult,
+          deliveryPeopleResult,
+          trackingEventsResult,
+          repairJobsResult,
+          repairPhotosResult,
+          repairUpdatesResult,
+          repairPartsResult,
+        ] = await Promise.all([
+          supabase.from('customers').select('*').order('created_at', { ascending: false }),
+          supabase.from('device_brands').select('*').order('name'),
+          supabase.from('device_models').select('*').order('name'),
+          supabase.from('device_colors').select('*').order('name'),
+          supabase.from('labor_rates').select('*').order('service_name'),
+          supabase.from('products').select('*').order('created_at', { ascending: false }),
+          supabase.from('inventory_logs').select('*').order('timestamp', { ascending: false }),
+          supabase.from('quotations').select('*').order('created_at', { ascending: false }),
+          supabase.from('quotation_items').select('*').order('created_at', { ascending: false }),
+          supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+          supabase.from('invoice_items').select('*').order('created_at', { ascending: false }),
+          supabase.from('deliveries').select('*').order('created_at', { ascending: false }),
+          supabase.from('delivery_people').select('*'),
+          supabase.from('delivery_tracking_events').select('*').order('timestamp', { ascending: false }),
+          supabase.from('repair_jobs').select('*').order('created_at', { ascending: false }),
+          supabase.from('repair_job_photos').select('*').order('created_at', { ascending: false }),
+          supabase.from('repair_job_updates').select('*').order('logged_at', { ascending: false }),
+          supabase.from('repair_job_parts').select('*').order('created_at', { ascending: false }),
+        ]);
 
       if (customersResult.data) {
         setCustomers(customersResult.data.map(customer => ({
@@ -332,6 +347,25 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         return acc;
       }, {});
 
+      const deliveryPeopleById = (deliveryPeopleResult.data || []).reduce<Record<string, DeliveryPerson>>((acc, person) => {
+        acc[person.id] = {
+          id: person.id,
+          name: person.name,
+          phone: person.phone,
+          vehicleNumber: person.vehicle_number || undefined,
+        };
+        return acc;
+      }, {});
+
+      if (deliveryPeopleResult.data) {
+        setDeliveryPeople(deliveryPeopleResult.data.map(person => ({
+          id: person.id,
+          name: person.name,
+          phone: person.phone,
+          vehicleNumber: person.vehicle_number || undefined,
+        })));
+      }
+
       if (deliveriesResult.data) {
         setDeliveries(deliveriesResult.data.map(delivery => ({
           id: delivery.id,
@@ -342,7 +376,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           quantity: delivery.quantity,
           currentStage: delivery.current_stage,
           status: delivery.status,
-          deliveryPerson: delivery.delivery_person_id ? undefined : undefined,
+          deliveryPerson: delivery.delivery_person_id ? deliveryPeopleById[delivery.delivery_person_id] : undefined,
           recipientName: delivery.recipient_name || undefined,
           recipientPhone: delivery.recipient_phone || undefined,
           deliveryAddress: delivery.delivery_address,
@@ -426,8 +460,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           })),
         })));
       }
+      } catch (loadError) {
+        console.error('Failed to load data:', loadError);
+        setError('Unable to load application data. Please refresh and try again.');
+      } finally {
+        setIsLoading(false);
+      }
     };
-
     void loadData();
   }, []);
 
@@ -653,6 +692,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     };
 
     setInvoices(prev => [...prev, newInvoice]);
+    setDeliveries(prev => [...prev, ...buildDeliveriesForInvoice(newInvoice)]);
     updateQuotation(quotationId, { status: 'converted' });
 
     // Reduce inventory for each item in the quotation
@@ -670,6 +710,42 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     return newInvoice;
   };
 
+  // Builds one delivery record per invoice line item. Used by both addInvoice and
+  // convertToInvoice so every completed sale (direct POS, quotation conversion, or
+  // repair conversion) automatically creates delivery records — independent of
+  // whether the customer later chooses "Print Receipt" or "Skip".
+  //
+  // NOTE: the app's write layer is currently local React state (Supabase is used
+  // for reads on load + auth). These records are committed together with the
+  // invoice; once persistence is wired up this should become part of the same DB
+  // transaction as the invoice insert.
+  const buildDeliveriesForInvoice = (invoice: Invoice): Delivery[] => {
+    const now = new Date();
+    return invoice.items.map((item, index) => ({
+      id: `del-${now.getTime()}-${index}-${item.id}`,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      productCode: item.productCode,
+      productName: item.productName,
+      quantity: item.quantity,
+      currentStage: 'in_inventory',
+      status: 'pending',
+      deliveryAddress: invoice.clientAddress,
+      recipientName: invoice.clientName,
+      recipientPhone: invoice.clientPhone,
+      createdAt: now,
+      trackingHistory: [
+        {
+          id: `th-${now.getTime()}-${index}`,
+          stage: 'in_inventory',
+          timestamp: now,
+          updatedBy: 'System',
+          notes: 'Order created, ready for dispatch',
+        },
+      ],
+    }));
+  };
+
   // Invoice functions
   const addInvoice = (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Invoice => {
     const newInvoice: Invoice = {
@@ -678,8 +754,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       invoiceNumber: generateInvoiceNumber(),
       createdAt: new Date(),
     };
-    
+
+    // Compute delivery records BEFORE committing anything to state. Since the
+    // data layer has no DB transaction, compute-then-commit gives us the safest
+    // equivalent of "same transaction as the invoice": if delivery creation
+    // throws, the invoice is never committed and the sale fails loudly instead
+    // of leaving an invoice without its delivery records.
+    const newDeliveries = buildDeliveriesForInvoice(newInvoice);
+
     setInvoices(prev => [...prev, newInvoice]);
+    setDeliveries(prev => [...prev, ...newDeliveries]);
 
     // Update inventory for each item
     invoiceData.items.forEach(item => {
@@ -691,36 +775,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         'System',
         `Invoice ${newInvoice.invoiceNumber}`
       );
-    });
-
-    // Create delivery records
-    const invoice = invoices.find(i => i.id === newInvoice.id) || newInvoice;
-    invoiceData.items.forEach(item => {
-      const now = new Date();
-      const delivery: Delivery = {
-        id: `del-${Date.now()}-${item.id}`,
-        invoiceId: newInvoice.id,
-        invoiceNumber: newInvoice.invoiceNumber,
-        productCode: item.productCode,
-        productName: item.productName,
-        quantity: item.quantity,
-        currentStage: 'in_inventory',
-        status: 'pending',
-        deliveryAddress: invoiceData.clientAddress,
-        recipientName: invoiceData.clientName,
-        recipientPhone: invoiceData.clientPhone,
-        createdAt: now,
-        trackingHistory: [
-          {
-            id: `th-${Date.now()}`,
-            stage: 'in_inventory',
-            timestamp: now,
-            updatedBy: 'System',
-            notes: 'Order created, ready for dispatch',
-          },
-        ],
-      };
-      setDeliveries(prev => [...prev, delivery]);
     });
 
     return newInvoice;
@@ -802,6 +856,27 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     ));
   };
 
+  const addDeliveryPerson = (deliveryPersonData: Omit<DeliveryPerson, 'id'>): DeliveryPerson => {
+    const newDeliveryPerson: DeliveryPerson = {
+      ...deliveryPersonData,
+      id: `dp-${Date.now()}`,
+    };
+    setDeliveryPeople(prev => [...prev, newDeliveryPerson]);
+    return newDeliveryPerson;
+  };
+
+  const assignDeliveryPeople = (ids: string[], deliveryPerson: DeliveryPerson) => {
+    setDeliveries(prev => prev.map(d => 
+      ids.includes(d.id) ? { ...d, deliveryPerson } : d
+    ));
+  };
+
+  const unassignDeliveryPerson = (id: string) => {
+    setDeliveries(prev => prev.map(d => 
+      d.id === id ? { ...d, deliveryPerson: undefined } : d
+    ));
+  };
+
   const markDeliveryReturned = (id: string, updatedBy: string, notes?: string) => {
     updateDeliveryStage(id, 'returned', updatedBy, notes || 'Item returned to inventory');
   };
@@ -832,10 +907,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       addInvoice,
       updateInvoice,
       cancelInvoice,
+      isLoading,
+      error,
       deliveries,
+      deliveryPeople,
       updateDeliveryStage,
       assignDeliveryPerson,
+      assignDeliveryPeople,
+      unassignDeliveryPerson,
       markDeliveryReturned,
+      addDeliveryPerson,
       getDelivery,
       addRepairJob,
       updateRepairJob,

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
@@ -8,9 +9,42 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Building2, User, Bell, Shield, Database } from 'lucide-react';
+import { useCompanyInfo, setCompanyInfo } from '@/lib/branding';
+import { toast } from '@/hooks/use-toast';
 
 const SettingsPage = () => {
   const { user } = useAuth();
+  const companyInfo = useCompanyInfo();
+
+  // Local form state seeded from the single source of truth (branding.ts) so
+  // the form shows whatever the receipts actually render, not stale defaults.
+  const [companyForm, setCompanyForm] = useState({
+    name: companyInfo.name,
+    tagline: companyInfo.tagline,
+    address: companyInfo.address,
+    phone: companyInfo.phone,
+    email: companyInfo.email,
+    panNumber: companyInfo.panNumber,
+  });
+
+  const handleCompanyFieldChange = (field: keyof typeof companyForm, value: string) => {
+    setCompanyForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveCompanyInfo = () => {
+    setCompanyInfo({
+      name: companyForm.name,
+      tagline: companyForm.tagline,
+      address: companyForm.address,
+      phone: companyForm.phone,
+      email: companyForm.email,
+      panNumber: companyForm.panNumber,
+    });
+    toast({
+      title: 'Company Info Saved',
+      description: 'Company details updated for receipts and printouts (in-memory only — resets on refresh until Supabase persistence is wired up).',
+    });
+  };
 
   return (
     <AppLayout>
@@ -35,26 +69,60 @@ const SettingsPage = () => {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="companyName">Company Name</Label>
-                <Input id="companyName" defaultValue="IT Shop Solutions" />
+                <Input
+                  id="companyName"
+                  value={companyForm.name}
+                  onChange={(e) => handleCompanyFieldChange('name', e.target.value)}
+                />
               </div>
               <div>
-                <Label htmlFor="taxId">Tax ID / VAT Number</Label>
-                <Input id="taxId" defaultValue="TAX-123456789" />
+                <Label htmlFor="tagline">Tagline</Label>
+                <Input
+                  id="tagline"
+                  value={companyForm.tagline}
+                  onChange={(e) => handleCompanyFieldChange('tagline', e.target.value)}
+                  placeholder="Short tagline shown under the company name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="panNumber">PAN Number (Tax / VAT)</Label>
+                <Input
+                  id="panNumber"
+                  value={companyForm.panNumber}
+                  onChange={(e) => handleCompanyFieldChange('panNumber', e.target.value)}
+                  placeholder="XXXXXX"
+                />
               </div>
               <div>
                 <Label htmlFor="email">Business Email</Label>
-                <Input id="email" type="email" defaultValue="contact@itshop.com" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={companyForm.email}
+                  onChange={(e) => handleCompanyFieldChange('email', e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" defaultValue="+1 555-0100" />
+                <Input
+                  id="phone"
+                  value={companyForm.phone}
+                  onChange={(e) => handleCompanyFieldChange('phone', e.target.value)}
+                />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="address">Address</Label>
-                <Input id="address" defaultValue="123 Tech Street, Suite 100, Silicon Valley, CA 94000" />
+                <Input
+                  id="address"
+                  value={companyForm.address}
+                  onChange={(e) => handleCompanyFieldChange('address', e.target.value)}
+                />
               </div>
             </div>
-            <Button>Save Company Info</Button>
+            <p className="text-sm text-muted-foreground">
+              Saved in-memory only — changes appear on the next receipt/print instantly, but reset on refresh until persistence is connected.
+            </p>
+            <Button onClick={handleSaveCompanyInfo}>Save Company Info</Button>
           </CardContent>
         </Card>
 

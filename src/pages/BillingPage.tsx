@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
-import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,15 +24,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
 import { Product, HardwareProduct, SoftwareProduct, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 type ProductFilter = 'all' | 'software' | 'hardware' | 'chargers' | 'covers' | 'laptops';
+type InvoiceSortKey = 'clientName' | 'createdAt' | 'grandTotal';
+type SortDirection = 'asc' | 'desc';
+type InvoiceFilterStatus = 'all' | Invoice['status'];
+type InvoiceFilterPayment = 'all' | Invoice['paymentMode'];
 
 const BillingPage = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const quotationId = searchParams.get('quotation');
   const repairId = searchParams.get('repair');
 
@@ -50,11 +54,47 @@ const BillingPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
-  const [showCheckout, setShowCheckout] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [fromQuotation, setFromQuotation] = useState<string | null>(null);
   const [fromRepair, setFromRepair] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPrintPrompt, setShowPrintPrompt] = useState(false);
+  const [savedInvoice, setSavedInvoice] = useState<Invoice | null>(null);
+  const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
+  const [invoicePaymentFilter, setInvoicePaymentFilter] = useState<InvoiceFilterPayment>('all');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceFilterStatus>('all');
+  const [invoiceDateFrom, setInvoiceDateFrom] = useState('');
+  const [invoiceDateTo, setInvoiceDateTo] = useState('');
+  const [invoiceSortKey, setInvoiceSortKey] = useState<InvoiceSortKey>('createdAt');
+  const [invoiceSortDirection, setInvoiceSortDirection] = useState<SortDirection>('desc');
+
+  const resetPos = () => {
+    setItems([]);
+    setClientInfo({ name: '', email: '', phone: '', address: '' });
+    setPaymentMode('cash');
+    setFromQuotation(null);
+    setFromRepair(null);
+    setShowProductSearch(false);
+    setSearchTerm('');
+    setSavedInvoice(null);
+  };
+
+  const handlePromptClose = () => {
+    setShowPrintPrompt(false);
+    setSavedInvoice(null);
+  };
+
+  const handleSkipPrint = () => {
+    handlePromptClose();
+    resetPos();
+  };
+
+  const handlePrintReceipt = () => {
+    if (!savedInvoice) return;
+
+    setShowPrintPrompt(false);
+    navigate(`/billing/invoices/${savedInvoice.id}?autoprint=1&returnTo=/billing`);
+  };
 
   // Load quotation if converting
   useEffect(() => {
@@ -291,21 +331,15 @@ const BillingPage = () => {
     setIsLoading(true);
 
     try {
+      let invoice: Invoice;
+
       // If converting from quotation, use the convertToInvoice function
       if (fromQuotation) {
-        const invoice = convertToInvoice(fromQuotation, paymentMode);
-        toast({
-          title: 'Sale Complete!',
-          description: `Invoice ${invoice.invoiceNumber} created from quotation. Inventory updated.`,
-        });
+        invoice = convertToInvoice(fromQuotation, paymentMode);
       } else if (fromRepair) {
-        const invoice = convertRepairToInvoice(fromRepair, paymentMode);
-        toast({
-          title: 'Repair Payment Complete!',
-          description: `Invoice ${invoice.invoiceNumber} created for repair completion.`,
-        });
+        invoice = convertRepairToInvoice(fromRepair, paymentMode);
       } else {
-        const invoice = addInvoice({
+        invoice = addInvoice({
           clientName: clientInfo.name,
           clientEmail: clientInfo.email,
           clientPhone: clientInfo.phone,
@@ -320,18 +354,15 @@ const BillingPage = () => {
           createdBy: user?.id || '',
           paidAt: new Date(),
         });
-
-        toast({
-          title: 'Sale Complete!',
-          description: `Invoice ${invoice.invoiceNumber} has been created. Inventory updated.`,
-        });
       }
 
-      setItems([]);
-      setClientInfo({ name: '', email: '', phone: '', address: '' });
-      setShowCheckout(false);
-      setFromQuotation(null);
-      setFromRepair(null);
+      setSavedInvoice(invoice);
+      setShowPrintPrompt(true);
+
+      toast({
+        title: 'Sale Complete!',
+        description: `Invoice ${invoice.invoiceNumber} has been saved successfully.`,
+      });
     } catch (error) {
       console.error('Checkout failed:', error);
       toast({
@@ -344,54 +375,84 @@ const BillingPage = () => {
     }
   };
 
-  const recentInvoices = invoices.slice(0, 10);
+  const filteredInvoices = useMemo(() => {
+    const normalizedSearch = invoiceSearchTerm.trim().toLowerCase();
 
-  const invoiceColumns = [
-    {
-      key: 'invoiceNumber',
-      header: 'Invoice #',
-      cell: (invoice: Invoice) => (
-        <span className="font-mono text-sm text-primary">{invoice.invoiceNumber}</span>
-      ),
-    },
-    {
-      key: 'client',
-      header: 'Client',
-      cell: (invoice: Invoice) => (
-        <span className="font-medium">{invoice.clientName}</span>
-      ),
-    },
-    {
-      key: 'total',
-      header: 'Total',
-      cell: (invoice: Invoice) => (
-        <span className="font-medium">NPR {invoice.grandTotal.toLocaleString()}</span>
-      ),
-    },
-    {
-      key: 'payment',
-      header: 'Payment',
-      cell: (invoice: Invoice) => (
-        <StatusBadge status={invoice.paymentMode} variant="info" />
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      cell: (invoice: Invoice) => (
-        <StatusBadge status={invoice.status} variant={getStatusVariant(invoice.status)} />
-      ),
-    },
-    {
-      key: 'date',
-      header: 'Date',
-      cell: (invoice: Invoice) => (
-        <span className="text-sm text-muted-foreground">
-          {format(new Date(invoice.createdAt), 'MMM dd, yyyy')}
-        </span>
-      ),
-    },
-  ];
+    const matchesFilters = (invoice: Invoice) => {
+      const matchesSearch = !normalizedSearch || [
+        invoice.invoiceNumber,
+        invoice.clientName,
+        invoice.clientEmail,
+        invoice.clientPhone,
+      ].some(value => value.toLowerCase().includes(normalizedSearch));
+
+      const matchesPayment = invoicePaymentFilter === 'all' || invoice.paymentMode === invoicePaymentFilter;
+      const matchesStatus = invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter;
+      const invoiceDate = new Date(invoice.createdAt);
+      const matchesFromDate = !invoiceDateFrom || invoiceDate >= new Date(`${invoiceDateFrom}T00:00:00`);
+      const matchesToDate = !invoiceDateTo || invoiceDate <= new Date(`${invoiceDateTo}T23:59:59.999`);
+
+      return matchesSearch && matchesPayment && matchesStatus && matchesFromDate && matchesToDate;
+    };
+
+    const sortedInvoices = [...invoices.filter(matchesFilters)].sort((left, right) => {
+      const direction = invoiceSortDirection === 'asc' ? 1 : -1;
+
+      if (invoiceSortKey === 'clientName') {
+        return left.clientName.localeCompare(right.clientName) * direction;
+      }
+
+      if (invoiceSortKey === 'grandTotal') {
+        return (left.grandTotal - right.grandTotal) * direction;
+      }
+
+      return (new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()) * direction;
+    });
+
+    return sortedInvoices;
+  }, [invoiceDateFrom, invoiceDateTo, invoicePaymentFilter, invoiceSearchTerm, invoiceSortDirection, invoiceSortKey, invoiceStatusFilter, invoices]);
+
+  const hasActiveInvoiceFilters = Boolean(
+    invoiceSearchTerm ||
+    invoicePaymentFilter !== 'all' ||
+    invoiceStatusFilter !== 'all' ||
+    invoiceDateFrom ||
+    invoiceDateTo
+  );
+
+  const clearInvoiceFilters = () => {
+    setInvoiceSearchTerm('');
+    setInvoicePaymentFilter('all');
+    setInvoiceStatusFilter('all');
+    setInvoiceDateFrom('');
+    setInvoiceDateTo('');
+    setInvoiceSortKey('createdAt');
+    setInvoiceSortDirection('desc');
+  };
+
+  const toggleInvoiceSort = (key: InvoiceSortKey) => {
+    if (invoiceSortKey === key) {
+      setInvoiceSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+
+    setInvoiceSortKey(key);
+    setInvoiceSortDirection(key === 'createdAt' ? 'desc' : 'asc');
+  };
+
+  const renderSortIcon = (key: InvoiceSortKey) => {
+    if (invoiceSortKey !== key) {
+      return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
+
+    return invoiceSortDirection === 'asc'
+      ? <ArrowUp className="h-3.5 w-3.5 text-primary" />
+      : <ArrowDown className="h-3.5 w-3.5 text-primary" />;
+  };
+
+  const handleInvoiceRowClick = (invoiceId: string) => {
+    navigate(`/billing/invoices/${invoiceId}`);
+  };
 
   return (
     <AppLayout>
@@ -749,23 +810,169 @@ const BillingPage = () => {
 
         <TabsContent value="invoices">
           <Card>
-            <CardHeader>
-              <CardTitle>Recent Invoices</CardTitle>
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <CardTitle>Recent Invoices</CardTitle>
+                {hasActiveInvoiceFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearInvoiceFilters} className="self-start lg:self-auto">
+                    <X className="mr-2 h-4 w-4" />
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-1.5 xl:col-span-2">
+                  <Label htmlFor="invoice-search" className="text-xs uppercase tracking-wide text-muted-foreground">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="invoice-search"
+                      value={invoiceSearchTerm}
+                      onChange={(event) => setInvoiceSearchTerm(event.target.value)}
+                      placeholder="Search invoice, client, email, or phone..."
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-filter" className="text-xs uppercase tracking-wide text-muted-foreground">Payment</Label>
+                  <Select value={invoicePaymentFilter} onValueChange={(value: InvoiceFilterPayment) => setInvoicePaymentFilter(value)}>
+                    <SelectTrigger id="payment-filter">
+                      <SelectValue placeholder="All payments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All payments</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="online">Card / Online</SelectItem>
+                      <SelectItem value="bank">Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="status-filter" className="text-xs uppercase tracking-wide text-muted-foreground">Status</Label>
+                  <Select value={invoiceStatusFilter} onValueChange={(value: InvoiceFilterStatus) => setInvoiceStatusFilter(value)}>
+                    <SelectTrigger id="status-filter">
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="date-from" className="text-xs uppercase tracking-wide text-muted-foreground">From</Label>
+                  <Input id="date-from" type="date" value={invoiceDateFrom} onChange={(event) => setInvoiceDateFrom(event.target.value)} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="date-to" className="text-xs uppercase tracking-wide text-muted-foreground">To</Label>
+                  <Input id="date-to" type="date" value={invoiceDateTo} onChange={(event) => setInvoiceDateTo(event.target.value)} />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <DataTable
-                data={recentInvoices}
-                columns={invoiceColumns}
-                searchable
-                searchPlaceholder="Search invoices..."
-                searchKeys={['invoiceNumber', 'clientName']}
-                pageSize={10}
-                emptyMessage="No invoices found"
-              />
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50 text-left text-muted-foreground">
+                        <th className="px-4 py-3 font-medium">Invoice #</th>
+                        <th className="px-4 py-3 font-medium">
+                          <button type="button" className="inline-flex items-center gap-2" onClick={() => toggleInvoiceSort('clientName')}>
+                            Client
+                            {renderSortIcon('clientName')}
+                          </button>
+                        </th>
+                        <th className="px-4 py-3 font-medium">
+                          <button type="button" className="inline-flex items-center gap-2" onClick={() => toggleInvoiceSort('grandTotal')}>
+                            Total
+                            {renderSortIcon('grandTotal')}
+                          </button>
+                        </th>
+                        <th className="px-4 py-3 font-medium">Payment</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">
+                          <button type="button" className="inline-flex items-center gap-2" onClick={() => toggleInvoiceSort('createdAt')}>
+                            Date
+                            {renderSortIcon('createdAt')}
+                          </button>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredInvoices.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-14 text-center text-muted-foreground">
+                            {hasActiveInvoiceFilters ? 'No invoices match your filters.' : 'No invoices found.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredInvoices.map((invoice) => (
+                          <tr
+                            key={invoice.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleInvoiceRowClick(invoice.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleInvoiceRowClick(invoice.id);
+                              }
+                            }}
+                            className="cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none"
+                          >
+                            <td className="px-4 py-3">
+                              <Link
+                                to={`/billing/invoices/${invoice.id}`}
+                                className="font-mono text-sm font-medium text-primary hover:underline"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                {invoice.invoiceNumber}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 font-medium">{invoice.clientName}</td>
+                            <td className="px-4 py-3 font-medium">NPR {invoice.grandTotal.toLocaleString()}</td>
+                            <td className="px-4 py-3"><StatusBadge status={invoice.paymentMode} variant="info" /></td>
+                            <td className="px-4 py-3"><StatusBadge status={invoice.status} variant={getStatusVariant(invoice.status)} /></td>
+                            <td className="px-4 py-3 text-muted-foreground">{format(new Date(invoice.createdAt), 'MMM dd, yyyy')}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={showPrintPrompt} onOpenChange={(open) => {
+        if (!open) {
+          handlePromptClose();
+        }
+        setShowPrintPrompt(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sale completed. Print receipt for the customer?</DialogTitle>
+            <DialogDescription>
+              Choose whether to open the saved receipt for printing or finish without printing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={handleSkipPrint}>Skip</Button>
+            <Button onClick={handlePrintReceipt} disabled={!savedInvoice}>Print Receipt</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

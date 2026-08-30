@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -10,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Select,
   SelectContent,
@@ -49,7 +51,9 @@ import {
   PackageCheck,
   Navigation,
   UserCheck,
-  Warehouse
+  Warehouse,
+  Loader2,
+  Plus
 } from 'lucide-react';
 import { Delivery, DeliveryStage, DeliveryPerson } from '@/types';
 import { format } from 'date-fns';
@@ -75,7 +79,7 @@ const getNextStage = (currentStage: DeliveryStage): DeliveryStage | null => {
 };
 
 const DeliveriesPage = () => {
-  const { deliveries, updateDeliveryStage, assignDeliveryPerson, markDeliveryReturned } = useData();
+  const { deliveries, deliveryPeople, updateDeliveryStage, assignDeliveryPerson, assignDeliveryPeople, unassignDeliveryPerson, markDeliveryReturned, addDeliveryPerson } = useData();
   const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
@@ -91,9 +95,39 @@ const DeliveriesPage = () => {
     vehicleNumber: '',
   });
 
-  const filteredDeliveries = statusFilter === 'all' 
-    ? deliveries 
+  // Driver assignment (existing list + ad-hoc creation)
+  const [assignDriverId, setAssignDriverId] = useState<string>('');
+  const [showNewDriverForm, setShowNewDriverForm] = useState(false);
+
+  // Filters
+  const [driverFilter, setDriverFilter] = useState<string>('all');
+  const [recipientFilter, setRecipientFilter] = useState<string>('all');
+
+  // Bulk selection
+  const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<string[]>([]);
+  const [bulkDriverValue, setBulkDriverValue] = useState<string | undefined>(undefined);
+
+  // Busy state for assign / bulk actions
+  const [isSaving, setIsSaving] = useState(false);
+
+  const statusFilteredDeliveries = statusFilter === 'all'
+    ? deliveries
     : deliveries.filter(d => d.status === statusFilter);
+
+  // Combine status + driver + recipient filters. Note: the summary cards below
+  // intentionally count ALL deliveries (including auto-created ones from Task 1),
+  // not just the filtered subset, so they stay accurate at a glance.
+  const filteredDeliveries = statusFilteredDeliveries
+    .filter(d => {
+      if (driverFilter === 'all') return true;
+      if (driverFilter === 'unassigned') return !d.deliveryPerson;
+      return d.deliveryPerson?.id === driverFilter;
+    })
+    .filter(d => recipientFilter === 'all' || d.recipientName === recipientFilter);
+
+  const recipientOptions = [...new Set(
+    deliveries.map(d => d.recipientName).filter((name): name is string => Boolean(name))
+  )].sort((a, b) => a.localeCompare(b));
 
   const pendingCount = deliveries.filter(d => d.status === 'pending').length;
   const inProgressCount = deliveries.filter(d => d.status === 'in_progress').length;
@@ -130,27 +164,166 @@ const DeliveriesPage = () => {
     setUpdateNotes('');
   };
 
-  const handleAssignDeliveryPerson = () => {
-    if (!selectedDelivery || !deliveryPersonForm.name || !deliveryPersonForm.phone) {
-      toast({
-        title: 'Missing Information',
-        description: 'Please fill in the delivery person name and phone.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    assignDeliveryPerson(selectedDelivery.id, {
-      ...deliveryPersonForm,
-      id: `dp-${Date.now()}`,
-    });
-    toast({
-      title: 'Delivery Person Assigned',
-      description: `${deliveryPersonForm.name} has been assigned to this delivery.`,
-    });
+  const resetAssignDialog = () => {
     setShowAssignDialog(false);
+    setAssignDriverId('');
+    setShowNewDriverForm(false);
     setDeliveryPersonForm({ id: '', name: '', phone: '', vehicleNumber: '' });
     setSelectedDelivery(null);
+  };
+
+  const handleAssignDeliveryPerson = () => {
+    if (!selectedDelivery) return;
+
+    let person: DeliveryPerson | undefined;
+
+    if (showNewDriverForm) {
+      if (!deliveryPersonForm.name || !deliveryPersonForm.phone) {
+        toast({
+          title: 'Missing Information',
+          description: 'Please fill in the delivery person name and phone.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      person = addDeliveryPerson({
+        name: deliveryPersonForm.name,
+        phone: deliveryPersonForm.phone,
+        vehicleNumber: deliveryPersonForm.vehicleNumber || undefined,
+      });
+    } else {
+      person = deliveryPeople.find(p => p.id === assignDriverId);
+      if (!person) {
+        toast({
+          title: 'Select a Driver',
+          description: 'Choose a driver from the list or create a new one.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      assignDeliveryPerson(selectedDelivery.id, person);
+      toast({
+        title: 'Delivery Person Assigned',
+        description: `${person.name} has been assigned to this delivery.`,
+      });
+      resetAssignDialog();
+    } catch (error) {
+      console.error('Driver assignment failed:', error);
+      toast({
+        title: 'Assignment Failed',
+        description: 'Could not assign the driver. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Row-level driver assignment from the table dropdown
+  const handleRowDriverAssign = (delivery: Delivery, driverId: string) => {
+    if (driverId === 'unassigned') {
+      if (delivery.deliveryPerson) {
+        unassignDeliveryPerson(delivery.id);
+        toast({
+          title: 'Driver Unassigned',
+          description: `Driver removed from ${delivery.invoiceNumber}.`,
+        });
+      }
+      return;
+    }
+
+    const person = deliveryPeople.find(p => p.id === driverId);
+    if (!person) return;
+
+    assignDeliveryPerson(delivery.id, person);
+    toast({
+      title: 'Delivery Person Assigned',
+      description: `${person.name} has been assigned to ${delivery.invoiceNumber}.`,
+    });
+  };
+
+  // Bulk selection
+  const toggleDeliverySelection = (id: string) => {
+    setSelectedDeliveryIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedDeliveryIds(prev =>
+      prev.length === filteredDeliveries.length && filteredDeliveries.length > 0
+        ? []
+        : filteredDeliveries.map(d => d.id)
+    );
+  };
+
+  // Bulk driver assignment
+  const handleBulkAssignDriver = (driverId: string) => {
+    if (selectedDeliveryIds.length === 0) return;
+    const person = deliveryPeople.find(p => p.id === driverId);
+    if (!person) return;
+
+    setIsSaving(true);
+    try {
+      assignDeliveryPeople(selectedDeliveryIds, person);
+      toast({
+        title: 'Drivers Assigned',
+        description: `Assigned ${person.name} to ${selectedDeliveryIds.length} delivery record(s).`,
+      });
+      setSelectedDeliveryIds([]);
+      setBulkDriverValue(undefined);
+    } catch (error) {
+      console.error('Bulk driver assignment failed:', error);
+      toast({
+        title: 'Assignment Failed',
+        description: 'Could not assign drivers to the selected deliveries.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Bulk stage update — only advances each selected delivery to its exact next
+  // stage (same ordering guard as the single-row Update dialog), never a jump.
+  const handleBulkAdvanceStage = () => {
+    if (selectedDeliveryIds.length === 0) return;
+
+    setIsSaving(true);
+    try {
+      let advanced = 0;
+      const skipped: string[] = [];
+      selectedDeliveryIds.forEach(id => {
+        const delivery = deliveries.find(d => d.id === id);
+        if (!delivery) return;
+        const nextStage = getNextStage(delivery.currentStage);
+        if (nextStage) {
+          updateDeliveryStage(id, nextStage, user?.name || 'Unknown', 'Bulk stage update');
+          advanced++;
+        } else {
+          skipped.push(delivery.invoiceNumber);
+        }
+      });
+
+      const description = `Advanced ${advanced} delivery record(s) to their next stage.` +
+        (skipped.length > 0 ? ` Skipped ${skipped.length} (already at a final stage).` : '');
+
+      toast({ title: 'Stages Updated', description });
+      setSelectedDeliveryIds([]);
+    } catch (error) {
+      console.error('Bulk stage update failed:', error);
+      toast({
+        title: 'Stage Update Failed',
+        description: 'Could not update the selected deliveries.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getStageStatusColor = (stage: DeliveryStage, currentStage: DeliveryStage) => {
@@ -163,6 +336,18 @@ const DeliveriesPage = () => {
   };
 
   const columns = [
+    {
+      key: 'select',
+      header: '',
+      cell: (delivery: Delivery) => (
+        <Checkbox
+          checked={selectedDeliveryIds.includes(delivery.id)}
+          onCheckedChange={() => toggleDeliverySelection(delivery.id)}
+          aria-label={`Select delivery for ${delivery.invoiceNumber}`}
+        />
+      ),
+      className: 'w-12',
+    },
     {
       key: 'invoiceNumber',
       header: 'Invoice',
@@ -224,16 +409,23 @@ const DeliveriesPage = () => {
       key: 'deliveryPerson',
       header: 'Driver',
       cell: (delivery: Delivery) => (
-        <div>
-          {delivery.deliveryPerson ? (
-            <div className="text-sm">
-              <p className="font-medium">{delivery.deliveryPerson.name}</p>
-              <p className="text-xs text-muted-foreground">{delivery.deliveryPerson.vehicleNumber}</p>
-            </div>
-          ) : (
-            <span className="text-muted-foreground text-sm">Not assigned</span>
-          )}
-        </div>
+        <Select
+          value={delivery.deliveryPerson?.id || 'unassigned'}
+          onValueChange={(driverId) => handleRowDriverAssign(delivery, driverId)}
+          disabled={delivery.status === 'completed' || delivery.status === 'returned'}
+        >
+          <SelectTrigger className="h-8 w-[170px] text-xs">
+            <SelectValue placeholder="Not assigned" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unassigned">Not assigned</SelectItem>
+            {deliveryPeople.map(person => (
+              <SelectItem key={person.id} value={person.id}>
+                {person.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ),
     },
     {
@@ -333,14 +525,14 @@ const DeliveriesPage = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 mb-6 p-4 bg-card rounded-lg border border-border">
+      <div className="flex flex-wrap items-center gap-3 mb-6 p-4 bg-card rounded-lg border border-border">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium">Filter:</span>
         </div>
-        
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -352,16 +544,84 @@ const DeliveriesPage = () => {
           </SelectContent>
         </Select>
 
-        {statusFilter !== 'all' && (
-          <Button 
-            variant="ghost" 
+        <Select value={driverFilter} onValueChange={setDriverFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Driver" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Drivers</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {deliveryPeople.map(person => (
+              <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={recipientFilter} onValueChange={setRecipientFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Recipient" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Recipients</SelectItem>
+            {recipientOptions.map(name => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(statusFilter !== 'all' || driverFilter !== 'all' || recipientFilter !== 'all') && (
+          <Button
+            variant="ghost"
             size="sm"
-            onClick={() => setStatusFilter('all')}
+            onClick={() => {
+              setStatusFilter('all');
+              setDriverFilter('all');
+              setRecipientFilter('all');
+            }}
           >
-            Clear Filter
+            Clear Filters
           </Button>
         )}
       </div>
+
+      {/* Bulk actions */}
+      {selectedDeliveryIds.length > 0 && (
+        <div className="flex flex-col gap-3 mb-6 p-4 bg-card rounded-lg border border-border sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              checked={selectedDeliveryIds.length === filteredDeliveries.length && filteredDeliveries.length > 0}
+              onCheckedChange={toggleSelectAllFiltered}
+              aria-label="Select all visible deliveries"
+            />
+            <span className="text-sm font-medium">{selectedDeliveryIds.length} selected</span>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDeliveryIds([])}>
+              Clear
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={bulkDriverValue} onValueChange={handleBulkAssignDriver} disabled={isSaving}>
+              <SelectTrigger className="w-[210px]">
+                <SelectValue placeholder="Assign driver to selected..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bulk-placeholder" disabled>Assign driver...</SelectItem>
+                {deliveryPeople.map(person => (
+                  <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkAdvanceStage}
+              disabled={isSaving || selectedDeliveryIds.length === 0}
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              Advance to Next Stage
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-6">
@@ -396,7 +656,12 @@ const DeliveriesPage = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Invoice</p>
-                    <p className="font-mono text-sm text-primary">{selectedDelivery.invoiceNumber}</p>
+                    <Link
+                      to={`/billing/invoices/${selectedDelivery.invoiceId}`}
+                      className="font-mono text-sm text-primary hover:underline"
+                    >
+                      {selectedDelivery.invoiceNumber}
+                    </Link>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Product Code</p>
@@ -426,6 +691,19 @@ const DeliveriesPage = () => {
                     <span className="text-sm">{selectedDelivery.deliveryAddress}</span>
                   </div>
                 </div>
+
+                {selectedDelivery.actualDeliveryDate && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    <span className="text-sm">
+                      Delivered on {format(new Date(selectedDelivery.actualDeliveryDate), 'MMM dd, yyyy')}
+                    </span>
+                  </div>
+                )}
+
+                {selectedDelivery.notes && (
+                  <p className="text-sm text-muted-foreground italic">"{selectedDelivery.notes}"</p>
+                )}
 
                 {selectedDelivery.deliveryPerson && (
                   <>
@@ -652,55 +930,97 @@ const DeliveriesPage = () => {
       </Dialog>
 
       {/* Assign Delivery Person Dialog */}
-      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+      <Dialog open={showAssignDialog} onOpenChange={(open) => {
+        setShowAssignDialog(open);
+        if (!open) {
+          setAssignDriverId('');
+          setShowNewDriverForm(false);
+          setDeliveryPersonForm({ id: '', name: '', phone: '', vehicleNumber: '' });
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign Delivery Person</DialogTitle>
             <DialogDescription>
-              Assign a driver to this delivery
+              Assign a driver from the list, or add a new one
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="driverName">Driver Name *</Label>
-              <Input
-                id="driverName"
-                value={deliveryPersonForm.name}
-                onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Enter driver name"
-              />
+              <Label>Select a driver</Label>
+              <Select value={assignDriverId} onValueChange={(value) => {
+                setAssignDriverId(value);
+                setShowNewDriverForm(value === '__new__');
+              }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a driver..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__new__">
+                    <span className="flex items-center gap-2">
+                      <Plus className="w-3 h-3" /> Create new driver...
+                    </span>
+                  </SelectItem>
+                  {deliveryPeople.map(person => (
+                    <SelectItem key={person.id} value={person.id}>
+                      {person.name} ({person.phone})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="driverPhone">Phone Number *</Label>
-              <Input
-                id="driverPhone"
-                value={deliveryPersonForm.phone}
-                onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder="Enter phone number"
-              />
-            </div>
+            {showNewDriverForm && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <Label htmlFor="driverName">Driver Name *</Label>
+                  <Input
+                    id="driverName"
+                    value={deliveryPersonForm.name}
+                    onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter driver name"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="vehicleNumber">Vehicle Number (optional)</Label>
-              <Input
-                id="vehicleNumber"
-                value={deliveryPersonForm.vehicleNumber}
-                onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, vehicleNumber: e.target.value }))}
-                placeholder="Enter vehicle number"
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="driverPhone">Phone Number *</Label>
+                  <Input
+                    id="driverPhone"
+                    value={deliveryPersonForm.phone}
+                    onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="vehicleNumber">Vehicle Number (optional)</Label>
+                  <Input
+                    id="vehicleNumber"
+                    value={deliveryPersonForm.vehicleNumber}
+                    onChange={(e) => setDeliveryPersonForm(prev => ({ ...prev, vehicleNumber: e.target.value }))}
+                    placeholder="Enter vehicle number"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowAssignDialog(false);
-              setDeliveryPersonForm({ id: '', name: '', phone: '', vehicleNumber: '' });
-            }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAssignDialog(false);
+                setAssignDriverId('');
+                setShowNewDriverForm(false);
+                setDeliveryPersonForm({ id: '', name: '', phone: '', vehicleNumber: '' });
+              }}
+            >
               Cancel
             </Button>
-            <Button onClick={handleAssignDeliveryPerson}>
+            <Button onClick={handleAssignDeliveryPerson} disabled={isSaving}>
+              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Assign Driver
             </Button>
           </DialogFooter>

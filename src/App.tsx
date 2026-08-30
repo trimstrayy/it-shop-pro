@@ -19,6 +19,7 @@ import QuotationsPage from "./pages/QuotationsPage";
 import QuotationFormPage from "./pages/QuotationFormPage";
 import QuotationPreviewPage from "./pages/QuotationPreviewPage";
 import BillingPage from "./pages/BillingPage";
+import BillingInvoiceDetailPage from "./pages/BillingInvoiceDetailPage";
 import DeliveriesPage from "./pages/DeliveriesPage";
 import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/billing" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingPage /></AccessGate>} />
+              <Route path="/billing/invoices/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingInvoiceDetailPage /></AccessGate>} />
               <Route path="/products" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductsPage /></AccessGate>} />
               <Route path="/products/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
               <Route path="/products/:id/edit" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
