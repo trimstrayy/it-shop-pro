@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { DollarSign, TrendingUp, Package, Monitor, Database } from 'lucide-react';
+import { Banknote, TrendingUp, Package, Monitor, Database } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 
@@ -27,6 +27,13 @@ import { Invoice, HardwareProduct, SoftwareProduct } from '@/types';
 import { format } from 'date-fns';
 
 const COLORS = ['hsl(226, 71%, 40%)', 'hsl(173, 58%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-NP', {
+    style: 'currency',
+    currency: 'NPR',
+    maximumFractionDigits: 0,
+  }).format(value);
 
 const ReportsPage = () => {
   const { invoices, products } = useData();
@@ -156,14 +163,14 @@ const ReportsPage = () => {
       key: 'revenue',
       header: 'Revenue',
       cell: (row: typeof invoiceProfitData[0]) => (
-        <span>${row.revenue.toLocaleString()}</span>
+        <span>{formatCurrency(row.revenue)}</span>
       ),
     },
     {
       key: 'profit',
       header: 'Profit',
       cell: (row: typeof invoiceProfitData[0]) => (
-        <span className="font-medium text-success">${row.profit.toLocaleString()}</span>
+        <span className="font-medium text-success">{formatCurrency(row.profit)}</span>
       ),
     },
     {
@@ -219,14 +226,14 @@ const ReportsPage = () => {
       key: 'totalRevenue',
       header: 'Revenue',
       cell: (row: typeof productReportData[0]) => (
-        <span>${row.totalRevenue.toLocaleString()}</span>
+        <span>{formatCurrency(row.totalRevenue)}</span>
       ),
     },
     {
       key: 'totalProfit',
       header: 'Profit',
       cell: (row: typeof productReportData[0]) => (
-        <span className="font-medium text-success">${row.totalProfit.toLocaleString()}</span>
+        <span className="font-medium text-success">{formatCurrency(row.totalProfit)}</span>
       ),
     },
   ];
@@ -242,28 +249,28 @@ const ReportsPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Total Revenue"
-          value={`$${totalRevenue.toLocaleString()}`}
+          value={formatCurrency(totalRevenue)}
           subtitle="From paid invoices"
-          icon={DollarSign}
+          icon={Banknote}
           variant="primary"
         />
         <StatCard
           title="Total Profit"
-          value={`$${totalProfit.toLocaleString()}`}
+          value={formatCurrency(totalProfit)}
           subtitle={`${((totalProfit / totalRevenue) * 100).toFixed(1)}% margin`}
           icon={TrendingUp}
           variant="success"
         />
         <StatCard
           title="Hardware Sales"
-          value={`$${hardwareRevenue.toLocaleString()}`}
+          value={formatCurrency(hardwareRevenue)}
           subtitle={`${((hardwareRevenue / totalRevenue) * 100).toFixed(1)}% of total`}
           icon={Monitor}
           variant="default"
         />
         <StatCard
           title="Software Sales"
-          value={`$${softwareRevenue.toLocaleString()}`}
+          value={formatCurrency(softwareRevenue)}
           subtitle={`${((softwareRevenue / totalRevenue) * 100).toFixed(1)}% of total`}
           icon={Database}
           variant="default"
@@ -296,7 +303,7 @@ const ReportsPage = () => {
                         tick={{ fill: 'hsl(var(--muted-foreground))' }}
                         tickFormatter={(value) => format(new Date(value), 'MMM dd')}
                       />
-                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} tickFormatter={formatCurrency} />
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'hsl(var(--card))', 
@@ -304,7 +311,7 @@ const ReportsPage = () => {
                           borderRadius: '8px'
                         }}
                         labelFormatter={(value) => format(new Date(value), 'MMMM dd, yyyy')}
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        formatter={(value: number) => [formatCurrency(value), '']}
                       />
                       <Bar dataKey="totalSales" fill="hsl(226, 71%, 40%)" radius={[4, 4, 0, 0]} name="Sales" />
                       <Bar dataKey="totalProfit" fill="hsl(173, 58%, 39%)" radius={[4, 4, 0, 0]} name="Profit" />
@@ -338,7 +345,7 @@ const ReportsPage = () => {
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                        formatter={(value: number) => [formatCurrency(value), 'Revenue']}
                         contentStyle={{ 
                           backgroundColor: 'hsl(var(--card))', 
                           border: '1px solid hsl(var(--border))',
@@ -367,7 +374,7 @@ const ReportsPage = () => {
                         tick={{ fill: 'hsl(var(--muted-foreground))' }}
                         tickFormatter={(value) => format(new Date(value), 'MMM dd')}
                       />
-                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} tickFormatter={formatCurrency} />
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'hsl(var(--card))', 
@@ -375,7 +382,7 @@ const ReportsPage = () => {
                           borderRadius: '8px'
                         }}
                         labelFormatter={(value) => format(new Date(value), 'MMMM dd, yyyy')}
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        formatter={(value: number) => [formatCurrency(value), '']}
                       />
                       <Legend />
                       <Line 
