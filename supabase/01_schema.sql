@@ -47,13 +47,13 @@ exception
 end $$;
 
 do $$ begin
-  create type payment_mode as enum ('cash', 'online', 'bank');
+  create type payment_mode as enum ('cash', 'online', 'bank', 'credit');
 exception
   when duplicate_object then null;
 end $$;
 
 do $$ begin
-  create type invoice_status as enum ('pending', 'paid', 'cancelled');
+  create type invoice_status as enum ('pending', 'partial', 'paid', 'cancelled');
 exception
   when duplicate_object then null;
 end $$;
@@ -350,6 +350,8 @@ create table if not exists public.invoices (
   total_discount numeric(12,2) not null default 0,
   total_tax numeric(12,2) not null default 0,
   grand_total numeric(12,2) not null default 0,
+  amount_paid numeric(12,2) not null default 0 check (amount_paid >= 0 and amount_paid <= grand_total),
+  amount_due numeric(12,2) not null default 0 check (amount_due >= 0),
   payment_mode payment_mode not null,
   status invoice_status not null default 'pending',
   created_by uuid references public.profiles(id) on delete set null,

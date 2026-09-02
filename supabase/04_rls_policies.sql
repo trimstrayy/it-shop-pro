@@ -4,13 +4,54 @@
 
 -- Profiles
 alter table public.profiles enable row level security;
-drop policy if exists "profiles_authenticated_all" on public.profiles;
-create policy "profiles_authenticated_all"
+drop policy if exists "profiles_admin_all" on public.profiles;
+create policy "profiles_admin_all"
 on public.profiles
 for all
 to authenticated
-using (true)
-with check (true);
+using (
+  exists (
+    select 1
+    from public.profiles admin_profile
+    where admin_profile.auth_user_id = auth.uid()
+      and admin_profile.role = 'admin'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.profiles admin_profile
+    where admin_profile.auth_user_id = auth.uid()
+      and admin_profile.role = 'admin'
+  )
+);
+
+drop policy if exists "profiles_user_self" on public.profiles;
+create policy "profiles_user_self"
+on public.profiles
+for select
+to authenticated
+using (auth.uid() = auth_user_id);
+
+drop policy if exists "profiles_user_self_update" on public.profiles;
+create policy "profiles_user_self_update"
+on public.profiles
+for update
+to authenticated
+using (auth.uid() = auth_user_id)
+with check (
+  auth.uid() = auth_user_id
+  and role = (select p.role from public.profiles p where p.auth_user_id = auth.uid())
+  and email = (select p.email from public.profiles p where p.auth_user_id = auth.uid())
+  and is_active = (select p.is_active from public.profiles p where p.auth_user_id = auth.uid())
+);
+
+drop policy if exists "profiles_no_client_insert" on public.profiles;
+create policy "profiles_no_client_insert"
+on public.profiles
+for insert
+to authenticated
+with check (false);
 
 -- Customers
 alter table public.customers enable row level security;
