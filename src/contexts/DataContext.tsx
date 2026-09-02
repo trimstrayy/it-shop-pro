@@ -2,7 +2,9 @@
 import { 
   Product, 
   Quotation, 
-  Invoice, 
+  Invoice,
+  InvoicePayment,
+  SmsLog,
   Delivery,
   DeliveryStage,
   DeliveryTrackingEvent,
@@ -50,19 +52,21 @@ interface DataContextType {
   // Repair jobs
   addRepairJob: (repairJob: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>) => RepairJob;
   updateRepairJob: (id: string, updates: Partial<RepairJob>) => void;
-  convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode']) => Invoice;
+  convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Invoice;
 
   // Quotations
   quotations: Quotation[];
   addQuotation: (quotation: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>) => Quotation;
   updateQuotation: (id: string, updates: Partial<Quotation>) => void;
-  convertToInvoice: (quotationId: string, paymentMode: Invoice['paymentMode']) => Invoice;
+  convertToInvoice: (quotationId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Invoice;
 
   // Invoices
   invoices: Invoice[];
+  invoicePayments: InvoicePayment[];
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => Invoice;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   cancelInvoice: (id: string) => void;
+  recordInvoicePayment: (invoiceId: string, amount: number, recordedBy: string) => Promise<InvoicePayment | undefined>;
 
   // Data loading state
   isLoading: boolean;
@@ -105,6 +109,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [deliveryPeople, setDeliveryPeople] = useState<DeliveryPerson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,6 +133,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           quotationItemsResult,
           invoicesResult,
           invoiceItemsResult,
+          invoicePaymentsResult,
           deliveriesResult,
           deliveryPeopleResult,
           trackingEventsResult,
@@ -147,6 +153,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           supabase.from('quotation_items').select('*').order('created_at', { ascending: false }),
           supabase.from('invoices').select('*').order('created_at', { ascending: false }),
           supabase.from('invoice_items').select('*').order('created_at', { ascending: false }),
+          supabase.from('invoice_payments').select('*').order('paid_at', { ascending: false }),
           supabase.from('deliveries').select('*').order('created_at', { ascending: false }),
           supabase.from('delivery_people').select('*'),
           supabase.from('delivery_tracking_events').select('*').order('timestamp', { ascending: false }),
@@ -313,6 +320,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           id: invoice.id,
           invoiceNumber: invoice.invoice_number,
           quotationId: invoice.quotation_id || undefined,
+          customerId: invoice.customer_id || null,
           clientName: invoice.client_name,
           clientEmail: invoice.client_email,
           clientPhone: invoice.client_phone,
@@ -333,11 +341,23 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           totalDiscount: Number(invoice.total_discount ?? 0),
           totalTax: Number(invoice.total_tax ?? 0),
           grandTotal: Number(invoice.grand_total ?? 0),
+          amountPaid: Number(invoice.amount_paid ?? 0),
+          amountDue: Number(invoice.amount_due ?? 0),
           paymentMode: invoice.payment_mode,
           status: invoice.status,
           createdBy: invoice.created_by || '',
           createdAt: new Date(invoice.created_at),
           paidAt: invoice.paid_at ? new Date(invoice.paid_at) : undefined,
+        })));
+      }
+
+      if (invoicePaymentsResult.data) {
+        setInvoicePayments(invoicePaymentsResult.data.map(payment => ({
+          id: payment.id,
+          invoiceId: payment.invoice_id,
+          amount: Number(payment.amount ?? 0),
+          paidAt: new Date(payment.paid_at),
+          recordedBy: payment.recorded_by || '',
         })));
       }
 
@@ -588,7 +608,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     ));
   };
 
-  const convertRepairToInvoice = (repairJobId: string, paymentMode: Invoice['paymentMode']): Invoice => {
+  const convertRepairToInvoice = (repairJobId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Invoice => {
     const repairJob = repairJobs.find(job => job.id === repairJobId);
     if (!repairJob) throw new Error('Repair job not found');
 
@@ -619,7 +639,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       } as InvoiceItem)))
     ];
 
+    const grandTotalValue = invoiceItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const resolvedAmountPaid = paymentMode === 'credit' ? Math.min(Math.max(requestedAmountPaid, 0), grandTotalValue) : grandTotalValue;
     const invoice = addInvoice({
+      customerId: repairJob.customerId || null,
       clientName: repairJob.customer?.name || 'Repair Customer',
       clientEmail: repairJob.customer?.email || 'repair@example.com',
       clientPhone: repairJob.customer?.phone || 'N/A',
@@ -628,11 +651,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       subtotal: invoiceItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
       totalDiscount: 0,
       totalTax: 0,
-      grandTotal: invoiceItems.reduce((sum, item) => sum + item.lineTotal, 0),
+      grandTotal: grandTotalValue,
+      amountPaid: resolvedAmountPaid,
+      amountDue: paymentMode === 'credit' ? grandTotalValue : 0,
       paymentMode,
-      status: 'paid',
+      status: resolveInvoiceStatus(paymentMode, resolvedAmountPaid, grandTotalValue),
       createdBy: repairJob.assignedTechId || 'system',
-      paidAt: new Date(),
+      paidAt: paymentMode === 'credit' ? undefined : new Date(),
     });
 
     updateRepairJob(repairJobId, { status: 'delivered', completedAt: new Date() });
@@ -660,7 +685,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     ));
   };
 
-  const convertToInvoice = (quotationId: string, paymentMode: Invoice['paymentMode']): Invoice => {
+  const convertToInvoice = (quotationId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Invoice => {
     const quotation = quotations.find(q => q.id === quotationId);
     if (!quotation) throw new Error('Quotation not found');
 
@@ -672,10 +697,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       };
     });
 
+    const amountPaid = paymentMode === 'credit' ? Math.min(Math.max(requestedAmountPaid, 0), quotation.grandTotal) : quotation.grandTotal;
     const newInvoice: Invoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber: generateInvoiceNumber(),
       quotationId,
+      customerId: quotation.customerId || null,
       clientName: quotation.clientName,
       clientEmail: quotation.clientEmail,
       clientPhone: quotation.clientPhone,
@@ -685,10 +712,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       totalDiscount: quotation.totalDiscount,
       totalTax: quotation.totalTax,
       grandTotal: quotation.grandTotal,
+      amountPaid,
+      amountDue: paymentMode === 'credit' ? quotation.grandTotal : 0,
       paymentMode,
-      status: 'pending',
+      status: resolveInvoiceStatus(paymentMode, amountPaid, quotation.grandTotal),
       createdBy: quotation.createdBy,
       createdAt: new Date(),
+      paidAt: paymentMode === 'credit' ? undefined : new Date(),
     };
 
     setInvoices(prev => [...prev, newInvoice]);
@@ -746,26 +776,41 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     }));
   };
 
+  const resolveInvoiceStatus = (paymentMode: Invoice['paymentMode'], amountPaid: number, grandTotal: number): Invoice['status'] => {
+    if (paymentMode === 'credit') {
+      if (amountPaid >= grandTotal) return 'paid';
+      if (amountPaid > 0) return 'partial';
+      return 'pending';
+    }
+
+    return amountPaid >= grandTotal ? 'paid' : 'pending';
+  };
+
   // Invoice functions
   const addInvoice = (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Invoice => {
+    const paymentMode = invoiceData.paymentMode ?? 'cash';
+    const paidAmount = paymentMode === 'credit'
+      ? Number(invoiceData.amountPaid ?? 0)
+      : Number(invoiceData.grandTotal ?? 0);
+    const dueAmount = Math.max(0, Number(invoiceData.grandTotal ?? 0) - paidAmount);
+    const resolvedStatus = resolveInvoiceStatus(paymentMode, paidAmount, Number(invoiceData.grandTotal ?? 0));
+
     const newInvoice: Invoice = {
       ...invoiceData,
+      amountPaid: paidAmount,
+      amountDue: dueAmount,
+      status: resolvedStatus,
       id: `inv-${Date.now()}`,
       invoiceNumber: generateInvoiceNumber(),
       createdAt: new Date(),
+      paidAt: resolvedStatus === 'paid' ? new Date() : undefined,
     };
 
-    // Compute delivery records BEFORE committing anything to state. Since the
-    // data layer has no DB transaction, compute-then-commit gives us the safest
-    // equivalent of "same transaction as the invoice": if delivery creation
-    // throws, the invoice is never committed and the sale fails loudly instead
-    // of leaving an invoice without its delivery records.
     const newDeliveries = buildDeliveriesForInvoice(newInvoice);
 
     setInvoices(prev => [...prev, newInvoice]);
     setDeliveries(prev => [...prev, ...newDeliveries]);
 
-    // Update inventory for each item
     invoiceData.items.forEach(item => {
       updateInventory(
         item.productId,
@@ -790,7 +835,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     const invoice = invoices.find(i => i.id === id);
     if (!invoice) return;
 
-    // Restore inventory
     invoice.items.forEach(item => {
       updateInventory(
         item.productId,
@@ -802,7 +846,49 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       );
     });
 
-    updateInvoice(id, { status: 'cancelled' });
+    updateInvoice(id, { status: 'cancelled', amountPaid: 0, amountDue: invoice.grandTotal });
+  };
+
+  const recordInvoicePayment = async (invoiceId: string, amount: number, recordedBy: string): Promise<InvoicePayment | undefined> => {
+    const invoice = invoices.find(item => item.id === invoiceId);
+    if (!invoice) return undefined;
+
+    const safeAmount = Math.max(0, Number(amount ?? 0));
+    if (safeAmount <= 0 || invoice.amountDue <= 0) return undefined;
+
+    const appliedAmount = Math.min(safeAmount, invoice.amountDue);
+    const { data, error } = await supabase.rpc('record_invoice_payment', {
+      p_invoice_id: invoiceId,
+      p_amount: appliedAmount,
+      p_recorded_by: recordedBy,
+    });
+
+    if (error || !data) {
+      toast({ title: 'Payment recording failed', description: error?.message || 'The payment could not be recorded.', variant: 'destructive' });
+      return undefined;
+    }
+
+    const nextAmountPaid = Math.min(invoice.grandTotal, Math.max(0, invoice.amountPaid + appliedAmount));
+    const nextAmountDue = Math.max(0, invoice.grandTotal - nextAmountPaid);
+    const nextStatus = resolveInvoiceStatus(invoice.paymentMode, nextAmountPaid, invoice.grandTotal);
+
+    const payment: InvoicePayment = {
+      id: `pay-${Date.now()}`,
+      invoiceId,
+      amount: appliedAmount,
+      paidAt: new Date(),
+      recordedBy,
+    };
+
+    setInvoicePayments(prev => [payment, ...prev]);
+    updateInvoice(invoiceId, {
+      amountPaid: nextAmountPaid,
+      amountDue: nextAmountDue,
+      status: nextStatus,
+      paidAt: nextStatus === 'paid' ? new Date() : invoice.paidAt,
+    });
+
+    return payment;
   };
 
   // Delivery functions
@@ -904,9 +990,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       updateQuotation,
       convertToInvoice,
       invoices,
+      invoicePayments,
       addInvoice,
       updateInvoice,
       cancelInvoice,
+      recordInvoicePayment,
       isLoading,
       error,
       deliveries,

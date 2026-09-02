@@ -82,6 +82,7 @@ export interface QuotationItem {
 export interface Quotation {
   id: string;
   quotationNumber: string;
+  customerId?: string | null;
   clientName: string;
   clientEmail: string;
   clientPhone: string;
@@ -100,8 +101,8 @@ export interface Quotation {
 }
 
 // Invoice/Billing Types
-export type PaymentMode = 'cash' | 'online' | 'bank';
-export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
+export type PaymentMode = 'cash' | 'online' | 'bank' | 'credit';
+export type InvoiceStatus = 'pending' | 'partial' | 'paid' | 'cancelled';
 
 export interface InvoiceItem {
   id: string;
@@ -120,6 +121,7 @@ export interface Invoice {
   id: string;
   invoiceNumber: string;
   quotationId?: string;
+  customerId?: string | null;
   clientName: string;
   clientEmail: string;
   clientPhone: string;
@@ -129,11 +131,33 @@ export interface Invoice {
   totalDiscount: number;
   totalTax: number;
   grandTotal: number;
+  amountPaid: number;
+  amountDue: number;
   paymentMode: PaymentMode;
   status: InvoiceStatus;
   createdBy: string;
   createdAt: Date;
   paidAt?: Date;
+}
+
+export interface InvoicePayment {
+  id: string;
+  invoiceId: string;
+  amount: number;
+  paidAt: Date;
+  recordedBy: string;
+}
+
+export interface SmsLog {
+  id: string;
+  invoiceId?: string | null;
+  recipient: string;
+  message: string;
+  provider: string;
+  status: 'queued' | 'sent' | 'failed';
+  errorMessage?: string | null;
+  createdAt: Date;
+  sentBy?: string | null;
 }
 
 // Delivery Types

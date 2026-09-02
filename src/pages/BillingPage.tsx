@@ -28,6 +28,7 @@ import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText
 import { Product, HardwareProduct, SoftwareProduct, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { supabase } from '@/lib/supabase';
 
 type ProductFilter = 'all' | 'software' | 'hardware' | 'chargers' | 'covers' | 'laptops';
 type InvoiceSortKey = 'clientName' | 'createdAt' | 'grandTotal';
@@ -41,7 +42,7 @@ const BillingPage = () => {
   const quotationId = searchParams.get('quotation');
   const repairId = searchParams.get('repair');
 
-  const { products, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice } = useData();
+  const { products, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice, customers } = useData();
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -54,6 +55,8 @@ const BillingPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [amountPaid, setAmountPaid] = useState<number>(0);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [fromQuotation, setFromQuotation] = useState<string | null>(null);
   const [fromRepair, setFromRepair] = useState<string | null>(null);
@@ -72,6 +75,8 @@ const BillingPage = () => {
     setItems([]);
     setClientInfo({ name: '', email: '', phone: '', address: '' });
     setPaymentMode('cash');
+    setSelectedCustomerId(null);
+    setAmountPaid(0);
     setFromQuotation(null);
     setFromRepair(null);
     setShowProductSearch(false);
@@ -308,6 +313,16 @@ const BillingPage = () => {
     return sum + (taxableAmount * item.taxPercent / 100);
   }, 0);
   const grandTotal = subtotal - totalDiscount + totalTax;
+  const normalizedAmountPaid = paymentMode === 'credit' ? Math.min(Math.max(amountPaid, 0), grandTotal) : grandTotal;
+  const amountDue = Math.max(0, grandTotal - normalizedAmountPaid);
+
+  useEffect(() => {
+    if (paymentMode !== 'credit') {
+      setAmountPaid(0);
+      return;
+    }
+    setAmountPaid(prev => Math.min(Math.max(prev, 0), grandTotal));
+  }, [paymentMode, grandTotal]);
 
   const handleCheckout = async () => {
     if (!clientInfo.name) {
@@ -328,18 +343,31 @@ const BillingPage = () => {
       return;
     }
 
+    if (paymentMode === 'credit' && !selectedCustomerId) {
+      toast({
+        title: 'Customer required for credit sales',
+        description: 'Select a customer before completing a credit sale.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       let invoice: Invoice;
+      const creditPaidAmount = paymentMode === 'credit' ? normalizedAmountPaid : grandTotal;
+      const invoiceStatus = paymentMode === 'credit'
+        ? (creditPaidAmount >= grandTotal ? 'paid' : creditPaidAmount > 0 ? 'partial' : 'pending')
+        : 'paid';
 
-      // If converting from quotation, use the convertToInvoice function
       if (fromQuotation) {
-        invoice = convertToInvoice(fromQuotation, paymentMode);
+        invoice = convertToInvoice(fromQuotation, paymentMode, normalizedAmountPaid);
       } else if (fromRepair) {
-        invoice = convertRepairToInvoice(fromRepair, paymentMode);
+        invoice = convertRepairToInvoice(fromRepair, paymentMode, normalizedAmountPaid);
       } else {
         invoice = addInvoice({
+          customerId: selectedCustomerId,
           clientName: clientInfo.name,
           clientEmail: clientInfo.email,
           clientPhone: clientInfo.phone,
@@ -349,15 +377,29 @@ const BillingPage = () => {
           totalDiscount,
           totalTax,
           grandTotal,
+          amountPaid: creditPaidAmount,
+          amountDue: Math.max(0, grandTotal - creditPaidAmount),
           paymentMode,
-          status: 'paid',
+          status: invoiceStatus,
           createdBy: user?.id || '',
-          paidAt: new Date(),
+          paidAt: invoiceStatus === 'paid' ? new Date() : undefined,
         });
       }
 
       setSavedInvoice(invoice);
       setShowPrintPrompt(true);
+
+      if (paymentMode === 'credit' && invoice.amountDue > 0 && invoice.clientPhone) {
+        void supabase.functions.invoke('send-sms', {
+          body: {
+            invoiceId: invoice.id,
+            recipient: invoice.clientPhone,
+            message: `Thank you for your purchase of NPR ${invoice.grandTotal.toFixed(2)}. Outstanding balance: NPR ${invoice.amountDue.toFixed(2)}. - ${import.meta.env.VITE_APP_NAME || 'IT Gadget'}`,
+          },
+        }).then(({ error }) => {
+          if (error) toast({ title: 'Sale saved, SMS failed', description: error.message, variant: 'destructive' });
+        });
+      }
 
       toast({
         title: 'Sale Complete!',
@@ -755,7 +797,7 @@ const BillingPage = () => {
 
                   <div className="pt-4">
                     <Label>Payment Method</Label>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="grid grid-cols-4 gap-2 mt-2">
                       <Button
                         type="button"
                         variant={paymentMode === 'cash' ? 'default' : 'outline'}
@@ -783,8 +825,59 @@ const BillingPage = () => {
                         <Building className="w-5 h-5" />
                         <span className="text-xs">Bank</span>
                       </Button>
+                      <Button
+                        type="button"
+                        variant={paymentMode === 'credit' ? 'default' : 'outline'}
+                        onClick={() => setPaymentMode('credit')}
+                        className="flex-col gap-1 h-auto py-3"
+                      >
+                        <Receipt className="w-5 h-5" />
+                        <span className="text-xs">Credit</span>
+                      </Button>
                     </div>
                   </div>
+
+                  {paymentMode === 'credit' && (
+                    <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="credit-customer-select">Customer</Label>
+                        <Select value={selectedCustomerId ?? 'none'} onValueChange={(value) => setSelectedCustomerId(value === 'none' ? null : value)}>
+                          <SelectTrigger id="credit-customer-select">
+                            <SelectValue placeholder="Select customer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Select a customer</SelectItem>
+                            {customers.map((customer) => (
+                              <SelectItem key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {!selectedCustomerId && (
+                          <p className="text-xs text-destructive">Credit sales require a customer to be selected.</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <Label htmlFor="credit-amount-paid">Amount paid now</Label>
+                          <span className="text-muted-foreground">Up to NPR {grandTotal.toLocaleString()}</span>
+                        </div>
+                        <Input
+                          id="credit-amount-paid"
+                          type="number"
+                          min={0}
+                          max={grandTotal}
+                          step="0.01"
+                          value={amountPaid}
+                          onChange={(event) => setAmountPaid(Number(event.target.value || 0))}
+                        />
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Amount due</span>
+                          <span className="font-semibold text-primary">NPR {amountDue.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <Button
                     type="button"
@@ -861,6 +954,7 @@ const BillingPage = () => {
                       <SelectItem value="all">All statuses</SelectItem>
                       <SelectItem value="paid">Paid</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="partial">Partial</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>

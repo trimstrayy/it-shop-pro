@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Wrench,
+  UserCog,
+  CircleDollarSign,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +21,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { UserRole } from '@/types';
+import { APP_NAME } from '@/lib/branding';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +43,9 @@ const navigation = [
   { name: 'Repair Lab', href: '/lab', icon: Wrench, roles: ['admin', 'technician'] },
   { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['admin', 'sales', 'inventory'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'accountant'] },
+  { name: 'Credits', href: '/credits', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
+  { name: 'User Management', href: '/users', icon: UserCog, roles: ['admin'] },
 ];
 
 export const AppSidebar = () => {
@@ -51,6 +56,8 @@ export const AppSidebar = () => {
   const filteredNavigation = navigation.filter(item =>
     hasPermission(item.roles as UserRole[])
   );
+
+  console.log('[AppSidebar] user role', user?.role, 'filtered items', filteredNavigation.map(item => item.name));
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -70,7 +77,7 @@ export const AppSidebar = () => {
               <Package className="w-5 h-5 text-sidebar-primary-foreground" />
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-base truncate">IT Shop Manager</p>
+              <p className="font-bold text-base truncate">{APP_NAME}</p>
             </div>
           </div>
         )}

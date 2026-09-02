@@ -3,35 +3,17 @@ import { User, UserRole } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
+// Authentication must always go through Supabase Auth. No local, hardcoded, or env-based shortcuts are allowed.
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isInitializing: boolean;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const LOCAL_SUPERADMIN_STORAGE_KEY = 'it-shop-local-superadmin';
-
-const readLocalSuperadminSession = (): User | null => {
-  try {
-    const raw = localStorage.getItem(LOCAL_SUPERADMIN_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<User> & { createdAt?: string };
-    if (!parsed.email) return null;
-
-    return {
-      id: parsed.id || 'local-superadmin',
-      email: parsed.email,
-      name: parsed.name || parsed.email.split('@')[0],
-      role: parsed.role || 'admin',
-      createdAt: parsed.createdAt ? new Date(parsed.createdAt) : new Date(),
-    };
-  } catch {
-    return null;
-  }
-};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -47,6 +29,7 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const loadProfile = async (session: Session | null) => {
     if (!session?.user) {
@@ -56,20 +39,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, name, role, avatar_url, created_at, updated_at')
-      .or(`auth_user_id.eq.${session.user.id},email.eq.${session.user.email}`)
+      .select('id, email, name, role, avatar_url, is_active, created_at')
+      .eq('auth_user_id', session.user.id)
       .maybeSingle();
 
-    if (error || !data) {
-      const fallbackUser: User = {
-        id: session.user.id,
-        email: session.user.email || '',
-        name: session.user.email?.split('@')[0] || 'User',
-        role: 'sales',
-        createdAt: new Date(session.user.created_at),
-      };
-      setUser(fallbackUser);
-      return fallbackUser;
+    if (error || !data || !data.is_active) {
+      setUser(null);
+      // A missing or inactive profile must not retain an otherwise-valid Auth session.
+      await supabase.auth.signOut({ scope: 'local' });
+      return null;
     }
 
     const mappedUser: User = {
@@ -81,66 +59,85 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       createdAt: new Date(data.created_at),
     };
 
+    console.log('[AuthContext] loaded profile', {
+      authUserId: session.user.id,
+      email: data.email,
+      role: data.role,
+      isActive: data.is_active,
+      name: data.name,
+    });
+
     setUser(mappedUser);
     return mappedUser;
   };
 
   useEffect(() => {
-    const initializeSession = async () => {
-      const localFallbackUser = readLocalSuperadminSession();
-      if (localFallbackUser) {
-        setUser(localFallbackUser);
+    const refreshSessionProfile = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        setUser(null);
         return;
       }
 
-      const { data } = await supabase.auth.getSession();
       await loadProfile(data.session);
+    };
+
+    const initializeSession = async () => {
+      try {
+        await refreshSessionProfile();
+      } finally {
+        setIsInitializing(false);
+      }
     };
 
     void initializeSession();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      await loadProfile(session);
-      if (!_event || _event === 'SIGNED_OUT') {
-        localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
-      }
+    // Keep the current profile aligned with auth events: sign-in, token refresh, and sign-out are handled here,
+    // and a periodic recheck ensures a deactivated account is forcibly logged out even if another tab is already open.
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      void (async () => {
+        if (event === 'SIGNED_OUT' || !session) {
+          setUser(null);
+          return;
+        }
+
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+          await loadProfile(session);
+          return;
+        }
+
+        await loadProfile(session);
+      })();
     });
+
+    const recheckInterval = window.setInterval(() => {
+      void refreshSessionProfile();
+    }, 30000);
+
+    const handleWindowFocus = () => {
+      void refreshSessionProfile();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
 
     return () => {
       subscription.subscription.unsubscribe();
+      window.clearInterval(recheckInterval);
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, []);
 
   const login = async (email: string, password: string): Promise<User | null> => {
-    const localAllowed = import.meta.env.VITE_ALLOW_LOCAL_SUPERADMIN !== 'false';
-    const localEmail = (import.meta.env.VITE_LOCAL_SUPERADMIN_EMAIL || 'superadmin@it.com').trim().toLowerCase();
-    const localPassword = import.meta.env.VITE_LOCAL_SUPERADMIN_PASSWORD || 'SuperAdmin!2026#Secure';
-
-    if (localAllowed && email.trim().toLowerCase() === localEmail && password === localPassword) {
-      const localUser: User = {
-        id: 'local-superadmin',
-        email: localEmail,
-        name: 'Super Admin',
-        role: 'admin',
-        createdAt: new Date(),
-      };
-
-      localStorage.setItem(LOCAL_SUPERADMIN_STORAGE_KEY, JSON.stringify(localUser));
-      setUser(localUser);
-      return localUser;
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error || !data.session) {
       return null;
     }
 
-    localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
     return loadProfile(data.session);
   };
 
   const logout = () => {
-    localStorage.removeItem(LOCAL_SUPERADMIN_STORAGE_KEY);
     setUser(null);
     void supabase.auth.signOut();
   };
@@ -152,7 +149,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isInitializing, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

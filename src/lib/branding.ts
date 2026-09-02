@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+export const APP_NAME = import.meta.env.VITE_APP_NAME?.trim() || 'Business Manager';
+
 /**
  * Branding / company information shared across printed documents
  * (invoice receipts, quotations, product labels, etc.).
@@ -16,11 +18,11 @@ import { useSyncExternalStore } from 'react';
  */
 
 export const COMPANY_INFO = {
-  name: 'IT Gadget Hub',
-  tagline: 'Your IT Solutions Partner',
-  address: 'Banepa',
-  phone: '9741740000',
-  email: 'ayush11dahal@gmail.com',
+  name: APP_NAME,
+  tagline: 'Business Management System',
+  address: '',
+  phone: '',
+  email: '',
 };
 
 /**

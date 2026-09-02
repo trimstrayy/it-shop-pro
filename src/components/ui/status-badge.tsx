@@ -35,7 +35,7 @@ export const getStatusVariant = (status: string): StatusVariant => {
   if (['active', 'paid', 'delivered', 'accepted', 'in-stock', 'converted'].includes(statusLower)) {
     return 'success';
   }
-  if (['pending', 'draft', 'low-stock', 'shipped'].includes(statusLower)) {
+  if (['pending', 'partial', 'draft', 'low-stock', 'shipped'].includes(statusLower)) {
     return 'warning';
   }
   if (['inactive', 'cancelled', 'rejected', 'returned', 'out-of-stock'].includes(statusLower)) {

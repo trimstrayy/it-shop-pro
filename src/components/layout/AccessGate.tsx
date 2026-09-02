@@ -10,7 +10,11 @@ interface AccessGateProps {
 }
 
 export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateProps) => {
-  const { isAuthenticated, hasPermission } = useAuth();
+  const { isAuthenticated, isInitializing, hasPermission } = useAuth();
+
+  if (isInitializing) {
+    return <div className="min-h-screen grid place-items-center text-muted-foreground">Restoring your session…</div>;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

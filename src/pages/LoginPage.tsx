@@ -1,45 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Package, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { User } from '@/types';
+import { APP_NAME } from '@/lib/branding';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [demoAccounts, setDemoAccounts] = useState<User[]>([]);
   const { login } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const loadProfiles = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, email, name, role, avatar_url, created_at')
-        .order('role', { ascending: true });
-
-      if (data) {
-        setDemoAccounts(data.map(profile => ({
-          id: profile.id,
-          email: profile.email,
-          name: profile.name,
-          role: profile.role,
-          avatar: profile.avatar_url || undefined,
-          createdAt: new Date(profile.created_at),
-        })));
-      }
-    };
-
-    void loadProfiles();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +48,7 @@ const LoginPage = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-primary mb-4">
             <Package className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">IT Shop Manager</h1>
+          <h1 className="text-2xl font-bold text-foreground">{APP_NAME}</h1>
           <p className="text-muted-foreground mt-1">Enterprise Management System</p>
         </div>
 
@@ -96,7 +72,7 @@ const LoginPage = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@itshop.com"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -122,31 +98,6 @@ const LoginPage = () => {
           </CardContent>
         </Card>
 
-        {/* Demo Accounts */}
-        <Card className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Demo Accounts</CardTitle>
-            <CardDescription className="text-xs">These are loaded from Supabase profiles. Use the matching Supabase Auth password.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.id}
-                type="button"
-                onClick={() => {
-                  setEmail(account.email);
-                }}
-                className="flex items-center justify-between p-3 text-left rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground capitalize">{account.role}</p>
-                  <p className="text-xs text-muted-foreground">{account.name}</p>
-                </div>
-                <span className="text-xs text-muted-foreground">{account.email}</span>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

@@ -1,26 +1,47 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertCircle, ArrowLeft, Loader2, Printer } from 'lucide-react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { InvoiceReceipt } from '@/components/billing/InvoiceReceipt';
 
 const BillingInvoiceDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { invoices, isLoading, error } = useData();
+  const { invoices, isLoading, error, recordInvoicePayment } = useData();
+  const { user } = useAuth();
   const autoPrint = searchParams.get('autoprint') === '1';
   const returnTo = searchParams.get('returnTo') || '/billing';
   const hasAutoPrinted = useRef(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
 
   const invoice = invoices.find(item => item.id === id);
   const isLoadingInvoice = isLoading || (!invoice && invoices.length === 0 && !error);
   const notFound = !isLoadingInvoice && !error && !invoice;
+
+  const handleRecordPayment = async () => {
+    if (!invoice || !user) return;
+    const amount = Number(paymentAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    const payment = await recordInvoicePayment(invoice.id, amount, user.id);
+    if (payment) {
+      setPaymentAmount('');
+      setShowPaymentDialog(false);
+    }
+  };
 
   useEffect(() => {
     if (!autoPrint || !invoice || hasAutoPrinted.current) return;
@@ -72,10 +93,20 @@ const BillingInvoiceDetailPage = () => {
               Back to Billing
             </Button>
             {invoice && (
-              <Button variant="outline" onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print
-              </Button>
+              <>
+                {invoice.amountDue > 0 && (
+                  <Button variant="outline" onClick={() => {
+                    setPaymentAmount(String(Math.min(invoice.amountDue, invoice.grandTotal)));
+                    setShowPaymentDialog(true);
+                  }}>
+                    Record Payment
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => window.print()}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print Receipt
+                </Button>
+              </>
             )}
           </div>
         }
@@ -132,8 +163,56 @@ const BillingInvoiceDetailPage = () => {
           </Card>
 
           <InvoiceReceipt invoice={invoice} />
+
+          {invoice.amountDue > 0 && (
+            <Card className="no-print">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Outstanding balance</p>
+                    <p className="text-2xl font-bold text-primary">NPR {invoice.amountDue.toLocaleString()}</p>
+                  </div>
+                  <Button onClick={() => {
+                    setPaymentAmount(String(Math.min(invoice.amountDue, invoice.grandTotal)));
+                    setShowPaymentDialog(true);
+                  }}>
+                    Record Payment
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       ) : null}
+
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record additional payment</DialogTitle>
+            <DialogDescription>
+              Apply a payment to this invoice. The balance will update automatically and the status will switch to paid once the total is settled.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="payment-amount">Payment amount</Label>
+            <Input
+              id="payment-amount"
+              type="number"
+              min={0.01}
+              max={invoice?.amountDue ?? 0}
+              step="0.01"
+              value={paymentAmount}
+              onChange={(event) => setPaymentAmount(event.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>Cancel</Button>
+            <Button onClick={handleRecordPayment} disabled={!invoice || !user || !Number(paymentAmount) || Number(paymentAmount) <= 0}>
+              Save payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };
