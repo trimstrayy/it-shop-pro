@@ -25,18 +25,14 @@ import {
 } from 'recharts';
 import { Invoice, HardwareProduct, SoftwareProduct } from '@/types';
 import { format } from 'date-fns';
+import { DailyRecordsTab } from '@/components/reports/DailyRecordsTab';
+import { calculateInvoiceProfit, calculateItemProfit } from '@/lib/reports/profit';
+import { formatCurrency } from '@/lib/reports/format';
 
 const COLORS = ['hsl(226, 71%, 40%)', 'hsl(173, 58%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(0, 84%, 60%)'];
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-NP', {
-    style: 'currency',
-    currency: 'NPR',
-    maximumFractionDigits: 0,
-  }).format(value);
-
 const ReportsPage = () => {
-  const { invoices, products } = useData();
+  const { invoices, products, isLoading, error } = useData();
 
   const paidInvoices = invoices.filter(invoice => invoice.status === 'paid');
 
@@ -60,8 +56,7 @@ const ReportsPage = () => {
 
       invoice.items.forEach(item => {
         const product = products.find(productRow => productRow.id === item.productId);
-        const profit = (item.unitPrice - item.costPrice) * item.quantity;
-        day.totalProfit += profit;
+        day.totalProfit += calculateItemProfit(item);
         if (product?.type === 'hardware') {
           day.hardwareSales += item.lineTotal;
         } else {
@@ -80,7 +75,7 @@ const ReportsPage = () => {
       const soldItems = paidInvoices.flatMap(invoice => invoice.items).filter(item => item.productId === product.id);
       const totalSold = soldItems.reduce((sum, item) => sum + item.quantity, 0);
       const totalRevenue = soldItems.reduce((sum, item) => sum + item.lineTotal, 0);
-      const totalProfit = soldItems.reduce((sum, item) => sum + ((item.unitPrice - item.costPrice) * item.quantity), 0);
+      const totalProfit = soldItems.reduce((sum, item) => sum + calculateItemProfit(item), 0);
 
       return {
         productId: product.id,
@@ -97,13 +92,10 @@ const ReportsPage = () => {
   // Calculate overall stats
   const totalRevenue = paidInvoices.reduce((sum, i) => sum + i.grandTotal, 0);
 
-  const totalProfit = paidInvoices.reduce((sum, invoice) => {
-    const invoiceProfit = invoice.items.reduce((itemSum, item) => {
-      const profit = (item.unitPrice - item.costPrice) * item.quantity;
-      return itemSum + profit;
-    }, 0);
-    return sum + invoiceProfit;
-  }, 0);
+  const totalProfit = paidInvoices.reduce(
+    (sum, invoice) => sum + calculateInvoiceProfit(invoice.items),
+    0,
+  );
 
   const hardwareRevenue = paidInvoices.reduce((sum, invoice) => {
     const hwItems = invoice.items.filter(item => {
@@ -131,9 +123,7 @@ const ReportsPage = () => {
   const invoiceProfitData = invoices
     .filter(i => i.status === 'paid')
     .map(invoice => {
-      const profit = invoice.items.reduce((sum, item) => {
-        return sum + (item.unitPrice - item.costPrice) * item.quantity;
-      }, 0);
+      const profit = calculateInvoiceProfit(invoice.items);
       return {
         invoiceNumber: invoice.invoiceNumber,
         clientName: invoice.clientName,
@@ -280,6 +270,7 @@ const ReportsPage = () => {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="daily-records">Daily Records</TabsTrigger>
           <TabsTrigger value="invoices">Invoice Profit</TabsTrigger>
           <TabsTrigger value="products">Product Performance</TabsTrigger>
           <TabsTrigger value="lab-board">Lab Board</TabsTrigger>
@@ -407,6 +398,15 @@ const ReportsPage = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="daily-records">
+          <DailyRecordsTab
+            invoices={invoices}
+            products={products}
+            isLoading={isLoading}
+            error={error}
+          />
         </TabsContent>
 
         <TabsContent value="invoices">

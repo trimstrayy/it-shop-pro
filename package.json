@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "test:reports": "node --experimental-strip-types scripts/smoke-reports.ts",
     "preview": "vite preview"
   },
   "dependencies": {
