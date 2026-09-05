@@ -46,6 +46,7 @@ const navigation = [
   { name: 'Credits', href: '/credits', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
   { name: 'User Management', href: '/users', icon: UserCog, roles: ['admin'] },
+  { name: 'Categories', href: '/categories', icon: Settings, roles: ['admin'] },
 ];
 
 export const AppSidebar = () => {

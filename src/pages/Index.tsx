@@ -8,6 +8,8 @@ const Index = () => {
     return <Navigate to="/login" replace />;
   }
 
+  if (user?.isPlatformAdmin) return <Navigate to="/platform-admin" replace />;
+
   return <Navigate to={user?.role === 'admin' || user?.role === 'technician' ? '/lab' : '/dashboard'} replace />;
 };
 

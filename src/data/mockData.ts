@@ -18,6 +18,8 @@ export const mockUsers: User[] = [
     email: 'admin@company.com',
     name: 'John Admin',
     role: 'admin',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-01-01'),
   },
   {
@@ -25,6 +27,8 @@ export const mockUsers: User[] = [
     email: 'sales@company.com',
     name: 'Sarah Sales',
     role: 'sales',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-02-15'),
   },
   {
@@ -32,6 +36,8 @@ export const mockUsers: User[] = [
     email: 'inventory@company.com',
     name: 'Mike Inventory',
     role: 'inventory',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-03-10'),
   },
   {
@@ -39,6 +45,8 @@ export const mockUsers: User[] = [
     email: 'accountant@company.com',
     name: 'Lisa Accounts',
     role: 'accountant',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-04-01'),
   },
   {
@@ -46,6 +54,8 @@ export const mockUsers: User[] = [
     email: 'tech1@company.com',
     name: 'Alex Technician',
     role: 'technician',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-05-01'),
   },
   {
@@ -53,6 +63,8 @@ export const mockUsers: User[] = [
     email: 'tech2@company.com',
     name: 'Maya Technician',
     role: 'technician',
+    tenantId: 'mock-tenant',
+    isPlatformAdmin: false,
     createdAt: new Date('2024-05-08'),
   },
   {

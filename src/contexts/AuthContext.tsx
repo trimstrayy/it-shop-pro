@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, name, role, avatar_url, is_active, created_at')
+      .select('id, email, name, role, avatar_url, is_active, created_at, tenant_id, is_platform_admin')
       .eq('auth_user_id', session.user.id)
       .maybeSingle();
 
@@ -55,6 +55,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       email: data.email,
       name: data.name,
       role: data.role,
+      tenantId: data.tenant_id ?? null,
+      isPlatformAdmin: Boolean(data.is_platform_admin),
       avatar: data.avatar_url || undefined,
       createdAt: new Date(data.created_at),
     };
@@ -63,6 +65,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       authUserId: session.user.id,
       email: data.email,
       role: data.role,
+      tenantId: data.tenant_id,
+      isPlatformAdmin: data.is_platform_admin,
       isActive: data.is_active,
       name: data.name,
     });

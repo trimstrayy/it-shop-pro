@@ -28,6 +28,8 @@ import UsersPage from "./pages/UsersPage";
 import CreditsPage from "./pages/CreditsPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LabPage from "./pages/LabPage";
+import PlatformAdminPage from "./pages/PlatformAdminPage";
+import CategoryManagementPage from "./pages/CategoryManagementPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +60,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/platform-admin" element={<PlatformAdminPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/billing" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingPage /></AccessGate>} />
               <Route path="/billing/invoices/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><BillingInvoiceDetailPage /></AccessGate>} />
@@ -73,6 +76,7 @@ const App = () => {
               <Route path="/reports" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ReportsPage /></AccessGate>} />
               <Route path="/credits" element={<AccessGate allowedRoles={['admin', 'accountant']} fallbackPath="/dashboard"><CreditsPage /></AccessGate>} />
               <Route path="/settings" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><SettingsPage /></AccessGate>} />
+              <Route path="/categories" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><CategoryManagementPage /></AccessGate>} />
               <Route path="/users" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><UsersPage /></AccessGate>} />
               <Route path="/lab" element={<AccessGate allowedRoles={labRoles} fallbackPath="/dashboard"><LabPage /></AccessGate>} />
               <Route path="*" element={<NotFound />} />

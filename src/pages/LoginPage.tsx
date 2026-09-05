@@ -29,7 +29,9 @@ const LoginPage = () => {
           title: 'Welcome back!',
           description: 'You have successfully logged in.',
         });
-        navigate(authenticatedUser.role === 'admin' || authenticatedUser.role === 'technician' ? '/lab' : '/dashboard');
+        navigate(authenticatedUser.isPlatformAdmin
+          ? '/platform-admin'
+          : authenticatedUser.role === 'admin' || authenticatedUser.role === 'technician' ? '/lab' : '/dashboard');
       } else {
         setError('Invalid email or password');
       }

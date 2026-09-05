@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
 
@@ -10,7 +10,8 @@ interface AccessGateProps {
 }
 
 export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateProps) => {
-  const { isAuthenticated, isInitializing, hasPermission } = useAuth();
+  const { isAuthenticated, isInitializing, hasPermission, user } = useAuth();
+  const location = useLocation();
 
   if (isInitializing) {
     return <div className="min-h-screen grid place-items-center text-muted-foreground">Restoring your session…</div>;
@@ -18,6 +19,10 @@ export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateP
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (user?.isPlatformAdmin && location.pathname !== '/platform-admin') {
+    return <Navigate to="/platform-admin" replace />;
   }
 
   if (!hasPermission(allowedRoles)) {

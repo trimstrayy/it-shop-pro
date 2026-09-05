@@ -6,6 +6,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  tenantId: string | null;
+  isPlatformAdmin: boolean;
   avatar?: string;
   createdAt: Date;
 }
@@ -21,6 +23,10 @@ export interface BaseProduct {
   barcode: string;
   name: string;
   category: string;
+  categoryId?: string | null;
+  attributes?: Record<string, string | number | boolean | null>;
+  unitOfMeasure?: string;
+  isCutToOrder?: boolean;
   type: ProductType;
   costPrice: number;
   sellingPrice: number;
@@ -330,31 +336,25 @@ export interface RepairJob {
   parts?: RepairJobPart[];
 }
 
-// Categories
-export const PRODUCT_CATEGORIES = [
-  'Laptops',
-  'Desktops',
-  'Monitors',
-  'Keyboards',
-  'Mice',
-  'Storage',
-  'RAM',
-  'Graphics Cards',
-  'Networking',
-  'Software Licenses',
-  'Antivirus',
-  'Office Suite',
-  'Operating Systems',
-  'Accessories',
-  'Cables',
-  'Peripherals',
-  'Mobile Covers',
-  'Chargers',
-  'Wraps & Skins',
-  'Ambient Lights',
-  'Screen Protectors',
-  'Power Banks',
-  'Earphones & Headphones',
-] as const;
+export interface ProductCategory {
+  id: string;
+  name: string;
+  defaultUnitOfMeasure: string;
+  defaultIsCutToOrder: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
 
-export type ProductCategory = typeof PRODUCT_CATEGORIES[number];
+export type CategoryFieldType = 'text' | 'number' | 'select' | 'date';
+
+export interface CategoryFieldSchema {
+  id: string;
+  categoryId: string;
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType: CategoryFieldType;
+  fieldOptions: string[];
+  isRequired: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
