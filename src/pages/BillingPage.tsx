@@ -30,7 +30,7 @@ import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
-type ProductFilter = 'all' | 'software' | 'hardware' | 'chargers' | 'covers' | 'laptops';
+type ProductFilter = 'all' | string;
 type InvoiceSortKey = 'clientName' | 'createdAt' | 'grandTotal';
 type SortDirection = 'asc' | 'desc';
 type InvoiceFilterStatus = 'all' | Invoice['status'];
@@ -42,7 +42,7 @@ const BillingPage = () => {
   const quotationId = searchParams.get('quotation');
   const repairId = searchParams.get('repair');
 
-  const { products, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice, customers } = useData();
+  const { products, categories, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice, customers } = useData();
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -195,11 +195,7 @@ const BillingPage = () => {
   const filteredProducts = activeProducts.filter(product => {
     const matchesFilter =
       productFilter === 'all' ||
-      (productFilter === 'software' && product.type === 'software') ||
-      (productFilter === 'hardware' && product.type === 'hardware') ||
-      (productFilter === 'chargers' && product.type === 'hardware' && product.category === 'Chargers') ||
-      (productFilter === 'covers' && product.type === 'hardware' && product.category === 'Mobile Covers') ||
-      (productFilter === 'laptops' && product.type === 'hardware' && product.category === 'Laptops');
+      product.categoryId === productFilter || product.category === productFilter;
 
     const normalizedSearch = searchTerm.toLowerCase();
     const matchesSearch = !searchTerm ||
@@ -608,11 +604,9 @@ const BillingPage = () => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All Products</SelectItem>
-                            <SelectItem value="software">S/W — All Software</SelectItem>
-                            <SelectItem value="hardware">H/W — All Hardware</SelectItem>
-                            <SelectItem value="chargers">H/W — Chargers</SelectItem>
-                            <SelectItem value="covers">H/W — Covers</SelectItem>
-                            <SelectItem value="laptops">H/W — Laptops</SelectItem>
+                            {categories.map(category => (
+                              <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
