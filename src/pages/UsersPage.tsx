@@ -9,6 +9,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { UserRole } from '@/types';
+import { TemporaryPassword } from '@/components/TemporaryPassword';
 
 interface ProfileRecord {
   id: string;
@@ -21,6 +22,18 @@ interface ProfileRecord {
 }
 
 const roleOptions: UserRole[] = ['admin', 'sales', 'inventory', 'accountant', 'technician'];
+
+const getFunctionError = async (error: unknown): Promise<string | undefined> => {
+  const response = (error as { context?: Response })?.context;
+  if (!response) return error instanceof Error ? error.message : undefined;
+
+  try {
+    const payload = await response.clone().json() as { error?: string };
+    return payload.error || `Request failed with status ${response.status}`;
+  } catch {
+    return `Request failed with status ${response.status}`;
+  }
+};
 
 const UsersPage = () => {
   const { user: currentUser, logout } = useAuth();
@@ -83,7 +96,7 @@ const UsersPage = () => {
 
       const bodyError = typeof data?.error === 'string' ? data.error : undefined;
       if (error || bodyError || !data) {
-        const message = bodyError ?? error?.message ?? 'The user could not be created.';
+        const message = bodyError ?? await getFunctionError(error) ?? 'The user could not be created.';
         setCreateUserError(message);
         throw new Error(message);
       }
@@ -98,7 +111,7 @@ const UsersPage = () => {
       toast({
         title: 'User created',
         description: tempPassword
-          ? `User created successfully. Temporary password: ${tempPassword}`
+          ? <TemporaryPassword password={tempPassword} />
           : 'User created successfully.',
       });
 
