@@ -22,12 +22,17 @@ import {
   DeviceBrand,
   DeviceModel,
   DeviceColor
+  ,ProductCategory
+  ,CategoryFieldSchema
 } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { generateProductCode, generateBarcode, generateQuotationNumber, generateInvoiceNumber } from '@/lib/code-generators';
 
 interface DataContextType {
+  categories: ProductCategory[];
+  categoryFieldSchemas: CategoryFieldSchema[];
   customers: Customer[];
   laborRates: LaborRate[];
   repairJobs: RepairJob[];
@@ -37,7 +42,7 @@ interface DataContextType {
 
   // Products
   products: Product[];
-  addProduct: (product: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>) => Product;
+  addProduct: (product: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>) => Promise<Product>;
   updateProduct: (id: string, updates: Partial<Product>) => void;
   archiveProduct: (id: string) => void;
   deleteProduct: (id: string) => void;
@@ -99,6 +104,9 @@ interface DataProviderProps {
 }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
+  const { user } = useAuth();
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [categoryFieldSchemas, setCategoryFieldSchemas] = useState<CategoryFieldSchema[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [laborRates, setLaborRates] = useState<LaborRate[]>([]);
   const [repairJobs, setRepairJobs] = useState<RepairJob[]>([]);
@@ -116,9 +124,70 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user?.id || user.isPlatformAdmin) {
+      setCategories([]);
+      setCategoryFieldSchemas([]);
+      return;
+    }
+
+    const loadCategories = async () => {
+      const { data: categoryRows, error: categoryError } = await supabase.rpc('get_my_product_categories');
+
+      if (categoryError) {
+        setError(`Unable to load product categories: ${categoryError.message}`);
+        setCategories([]);
+        return;
+      }
+
+      console.info('[DataContext] loaded tenant categories', {
+        profileId: user.id,
+        count: categoryRows?.length ?? 0,
+      });
+
+      const categoryIds = (categoryRows ?? []).map(category => category.id);
+      const { data: fieldRows, error: fieldError } = categoryIds.length
+        ? await supabase.from('category_field_schemas').select('*').in('category_id', categoryIds).order('sort_order')
+        : { data: [], error: null };
+
+      if (fieldError) {
+        setError(`Unable to load category fields: ${fieldError.message}`);
+        setCategoryFieldSchemas([]);
+      } else {
+        setCategoryFieldSchemas((fieldRows ?? []).map(field => ({
+          id: field.id,
+          categoryId: field.category_id,
+          fieldKey: field.field_key,
+          fieldLabel: field.field_label,
+          fieldType: field.field_type,
+          fieldOptions: Array.isArray(field.field_options) ? field.field_options : [],
+          isRequired: Boolean(field.is_required),
+          sortOrder: Number(field.sort_order ?? 0),
+          isActive: field.is_active === undefined ? true : Boolean(field.is_active),
+        })));
+      }
+
+      setCategories((categoryRows ?? []).map(category => ({
+        id: category.id,
+        name: category.name,
+        defaultUnitOfMeasure: category.default_unit_of_measure || 'unit',
+        defaultIsCutToOrder: Boolean(category.default_is_cut_to_order),
+        sortOrder: Number(category.sort_order ?? 0),
+        isActive: Boolean(category.is_active),
+      })));
+    };
+
+    void loadCategories();
+  }, [user?.id, user?.isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!user?.id || !user.tenantId || user.isPlatformAdmin) {
+      setCategories([]);
+      setCategoryFieldSchemas([]);
+      return;
+    }
+
     const loadData = async () => {
       setIsLoading(true);
-      setError(null);
 
       try {
         const [
@@ -225,6 +294,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           barcode: product.barcode,
           name: product.name,
           category: product.category,
+          categoryId: product.category_id || null,
+          attributes: {
+            ...(product.attributes || {}),
+            ...(product.supplier && product.attributes?.supplier === undefined ? { supplier: product.supplier } : {}),
+            ...(product.attributes?.warranty_months === undefined && (product.attributes?.warranty_period !== undefined || product.warranty_period !== null) ? { warranty_months: product.attributes?.warranty_period ?? product.warranty_period } : {}),
+          },
+          unitOfMeasure: product.unit_of_measure || 'unit',
+          isCutToOrder: Boolean(product.is_cut_to_order),
           type: 'hardware',
           costPrice: Number(product.cost_price ?? 0),
           sellingPrice: Number(product.selling_price ?? 0),
@@ -242,6 +319,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           barcode: product.barcode,
           name: product.name,
           category: product.category,
+          categoryId: product.category_id || null,
+          attributes: {
+            ...(product.attributes || {}),
+            ...(product.license_type && product.attributes?.license_type === undefined ? { license_type: product.license_type } : {}),
+            ...(product.expiry_date && product.attributes?.expiry_date === undefined ? { expiry_date: product.expiry_date } : {}),
+          },
+          unitOfMeasure: product.unit_of_measure || 'unit',
+          isCutToOrder: Boolean(product.is_cut_to_order),
           type: 'software',
           costPrice: Number(product.cost_price ?? 0),
           sellingPrice: Number(product.selling_price ?? 0),
@@ -482,20 +567,20 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       }
       } catch (loadError) {
         console.error('Failed to load data:', loadError);
-        setError('Unable to load application data. Please refresh and try again.');
+        setError(current => current || 'Unable to load application data. Please refresh and try again.');
       } finally {
         setIsLoading(false);
       }
     };
     void loadData();
-  }, []);
+  }, [user?.id, user?.tenantId, user?.isPlatformAdmin]);
 
   // Product functions
-  const addProduct = (productData: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>): Product => {
+  const addProduct = async (productData: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>): Promise<Product> => {
     const now = new Date();
     const newProduct: Product = {
       ...productData,
-      id: `product-${Date.now()}`,
+      id: crypto.randomUUID(),
       productCode: generateProductCode(productData.type, productData.category),
       barcode: generateBarcode(),
       createdAt: now,
@@ -503,6 +588,30 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     } as Product;
     
     setProducts(prev => [...prev, newProduct] as Product[]);
+    const { error: insertError } = await supabase.from('products').insert({
+      tenant_id: user?.tenantId,
+      product_code: newProduct.productCode,
+      barcode: newProduct.barcode,
+      name: newProduct.name,
+      category: newProduct.category,
+      category_id: newProduct.categoryId || null,
+      type: newProduct.type,
+      cost_price: newProduct.costPrice,
+      selling_price: newProduct.sellingPrice,
+      tax_percent: newProduct.taxPercent,
+      status: newProduct.status,
+      description: newProduct.description || null,
+      attributes: newProduct.attributes || {},
+      unit_of_measure: newProduct.unitOfMeasure || 'unit',
+      is_cut_to_order: Boolean(newProduct.isCutToOrder),
+      stock_quantity: newProduct.stockQuantity ?? 0,
+      supplier: newProduct.type === 'hardware' ? newProduct.supplier : null,
+      warranty_period: newProduct.type === 'hardware' ? newProduct.warrantyPeriod : null,
+      license_type: newProduct.type === 'software' ? newProduct.licenseType : null,
+      license_quantity: newProduct.type === 'software' ? newProduct.licenseQuantity : null,
+      expiry_date: newProduct.type === 'software' ? newProduct.expiryDate?.toISOString() || null : null,
+    });
+    if (insertError) toast({ title: 'Product save failed', description: insertError.message, variant: 'destructive' });
     return newProduct;
   };
 
@@ -510,6 +619,24 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     setProducts(prev => prev.map(p => 
       p.id === id ? { ...p, ...updates, updatedAt: new Date() } as Product : p
     ));
+    void supabase.from('products').update({
+      ...('category' in updates ? { category: updates.category } : {}),
+      ...('categoryId' in updates ? { category_id: updates.categoryId } : {}),
+      ...('attributes' in updates ? { attributes: updates.attributes } : {}),
+      ...('unitOfMeasure' in updates ? { unit_of_measure: updates.unitOfMeasure } : {}),
+      ...('isCutToOrder' in updates ? { is_cut_to_order: updates.isCutToOrder } : {}),
+      ...('name' in updates ? { name: updates.name } : {}),
+      ...('costPrice' in updates ? { cost_price: updates.costPrice } : {}),
+      ...('sellingPrice' in updates ? { selling_price: updates.sellingPrice } : {}),
+      ...('taxPercent' in updates ? { tax_percent: updates.taxPercent } : {}),
+      ...('description' in updates ? { description: updates.description } : {}),
+      ...('status' in updates ? { status: updates.status } : {}),
+      ...('stockQuantity' in updates ? { stock_quantity: updates.stockQuantity } : {}),
+      ...('supplier' in updates ? { supplier: updates.supplier } : {}),
+      ...('warrantyPeriod' in updates ? { warranty_period: updates.warrantyPeriod } : {}),
+    }).eq('id', id).then(({ error: updateError }) => {
+      if (updateError) toast({ title: 'Product update failed', description: updateError.message, variant: 'destructive' });
+    });
   };
 
   const archiveProduct = (id: string) => {
@@ -969,6 +1096,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
   return (
     <DataContext.Provider value={{
+      categories,
+      categoryFieldSchemas,
       customers,
       laborRates,
       repairJobs,
