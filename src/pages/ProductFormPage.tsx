@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,8 +17,9 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { PRODUCT_CATEGORIES, ProductType, LicenseType, HardwareProduct, SoftwareProduct } from '@/types';
+import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
 import { ArrowLeft } from 'lucide-react';
 import {
   AlertDialog,
@@ -35,7 +36,7 @@ import {
 const ProductFormPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { products, addProduct, updateProduct, getProduct } = useData();
+  const { products, categories, categoryFieldSchemas, isLoading, error, addProduct, updateProduct, getProduct } = useData();
   const { user } = useAuth();
   
   const existingProduct = id ? getProduct(id) : null;
@@ -44,28 +45,62 @@ const ProductFormPage = () => {
   const [formData, setFormData] = useState({
     name: existingProduct?.name || '',
     category: existingProduct?.category || '',
-    type: (existingProduct?.type || 'hardware') as ProductType,
+    categoryId: existingProduct?.categoryId || '',
+    attributes: existingProduct?.attributes || {},
+    unitOfMeasure: existingProduct?.unitOfMeasure || 'unit',
+    isCutToOrder: existingProduct?.isCutToOrder || false,
     costPrice: existingProduct?.costPrice || 0,
     sellingPrice: existingProduct?.sellingPrice || 0,
     taxPercent: existingProduct?.taxPercent || 18,
     description: existingProduct?.description || '',
     status: existingProduct?.status || 'active',
-    // Hardware fields
-    stockQuantity: (existingProduct as HardwareProduct)?.stockQuantity || 0,
-    supplier: (existingProduct as HardwareProduct)?.supplier || '',
-    warrantyPeriod: (existingProduct as HardwareProduct)?.warrantyPeriod || 12,
-    // Software fields
-    licenseType: ((existingProduct as SoftwareProduct)?.licenseType || 'single') as LicenseType,
-    licenseQuantity: (existingProduct as SoftwareProduct)?.licenseQuantity || 0,
-    expiryDate: (existingProduct as SoftwareProduct)?.expiryDate 
-      ? new Date((existingProduct as SoftwareProduct).expiryDate!).toISOString().split('T')[0]
-      : '',
+    stockQuantity: Number((existingProduct as Product & { stockQuantity?: number })?.stockQuantity ?? 0),
   });
+  const [batches, setBatches] = useState<Array<{ id: string; batchCode: string; totalQuantity: number; remainingQuantity: number }>>([]);
+  const [batchCode, setBatchCode] = useState('');
+  const [batchQuantity, setBatchQuantity] = useState(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const selectedCategory = categories.find(category => category.id === formData.categoryId);
+  const dynamicFields = categoryFieldSchemas.filter(field => field.categoryId === formData.categoryId).sort((a, b) => a.sortOrder - b.sortOrder);
+
+  useEffect(() => {
+    if (!existingProduct || formData.categoryId || !categories.length) return;
+    const matchedCategory = categories.find(category => category.name === existingProduct.category);
+    if (matchedCategory) {
+      setFormData(current => ({
+        ...current,
+        categoryId: matchedCategory.id,
+        unitOfMeasure: existingProduct.unitOfMeasure || matchedCategory.defaultUnitOfMeasure,
+        isCutToOrder: existingProduct.isCutToOrder ?? matchedCategory.defaultIsCutToOrder,
+      }));
+    }
+  }, [categories, existingProduct, formData.categoryId]);
+
+  useEffect(() => {
+    if (!existingProduct?.id) return;
+    void supabase.from('product_batches').select('id, batch_code, total_quantity, remaining_quantity').eq('product_id', existingProduct.id).order('created_at').then(({ data }) => {
+      setBatches((data ?? []).map(batch => ({ id: batch.id, batchCode: batch.batch_code, totalQuantity: Number(batch.total_quantity), remainingQuantity: Number(batch.remaining_quantity) })));
+    });
+  }, [existingProduct?.id]);
+
+  const handleCategoryChange = (categoryId: string) => {
+    const category = categories.find(item => item.id === categoryId);
+    if (!category) return;
+    setFormData(current => ({
+      ...current,
+      categoryId,
+      category: category.name,
+      unitOfMeasure: category.defaultUnitOfMeasure,
+      isCutToOrder: category.defaultIsCutToOrder,
+      attributes: {},
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.category || !formData.costPrice || !formData.sellingPrice) {
+    const missingDynamicField = dynamicFields.find(field => formData.attributes[field.fieldKey] === undefined || formData.attributes[field.fieldKey] === '');
+    if (!formData.name || !formData.category || !formData.costPrice || !formData.sellingPrice || missingDynamicField) {
       toast({
         title: 'Validation Error',
         description: 'Please fill in all required fields.',
@@ -77,7 +112,12 @@ const ProductFormPage = () => {
     const baseProduct = {
       name: formData.name,
       category: formData.category,
-      type: formData.type,
+      categoryId: formData.categoryId || null,
+      attributes: formData.attributes,
+      unitOfMeasure: formData.unitOfMeasure,
+      isCutToOrder: formData.isCutToOrder,
+      type: existingProduct?.type || 'hardware',
+      stockQuantity: Number(formData.stockQuantity),
       costPrice: Number(formData.costPrice),
       sellingPrice: Number(formData.sellingPrice),
       taxPercent: Number(formData.taxPercent),
@@ -85,34 +125,12 @@ const ProductFormPage = () => {
       status: formData.status as 'active' | 'inactive',
     };
 
-    if (formData.type === 'hardware') {
-      const hardwareProduct = {
-        ...baseProduct,
-        type: 'hardware' as const,
-        stockQuantity: Number(formData.stockQuantity),
-        supplier: formData.supplier,
-        warrantyPeriod: Number(formData.warrantyPeriod),
-      };
-
-      if (isEditing) {
-        updateProduct(id!, hardwareProduct);
-      } else {
-        addProduct(hardwareProduct as any);
-      }
+    if (isEditing) {
+      updateProduct(id!, baseProduct);
+      await saveBatches(id!);
     } else {
-      const softwareProduct = {
-        ...baseProduct,
-        type: 'software' as const,
-        licenseType: formData.licenseType,
-        licenseQuantity: Number(formData.licenseQuantity),
-        expiryDate: formData.expiryDate ? new Date(formData.expiryDate) : undefined,
-      };
-
-      if (isEditing) {
-        updateProduct(id!, softwareProduct);
-      } else {
-        addProduct(softwareProduct as any);
-      }
+      const savedProduct = await addProduct(baseProduct as any);
+      await saveBatches(savedProduct.id);
     }
 
     toast({
@@ -122,11 +140,32 @@ const ProductFormPage = () => {
     navigate('/products');
   };
 
+  const saveBatches = async (productId: string) => {
+    if (!formData.isCutToOrder || !batches.length) return;
+    const unsavedBatches = batches.filter(batch => !batch.id.startsWith('local-'));
+    if (!unsavedBatches.length) return;
+    const { error } = await supabase.from('product_batches').insert(unsavedBatches.map(batch => ({
+      product_id: productId,
+      tenant_id: user?.tenantId,
+      batch_code: batch.batchCode,
+      total_quantity: batch.totalQuantity,
+      remaining_quantity: batch.remainingQuantity,
+    })));
+    if (error) toast({ title: 'Batch save failed', description: error.message, variant: 'destructive' });
+  };
+
+  const addBatch = () => {
+    if (!batchCode.trim() || batchQuantity <= 0) return;
+    setBatches(current => [...current, { id: `local-${Date.now()}`, batchCode: batchCode.trim(), totalQuantity: batchQuantity, remainingQuantity: batchQuantity }]);
+    setBatchCode('');
+    setBatchQuantity(0);
+  };
+
   return (
     <AppLayout>
       <PageHeader 
         title={isEditing ? 'Edit Product' : 'Add New Product'}
-        description={isEditing ? `Editing ${existingProduct?.name}` : 'Create a new hardware or software product'}
+        description={isEditing ? `Editing ${existingProduct?.name}` : 'Create a new product using tenant-specific category fields'}
         actions={
           <Button variant="outline" onClick={() => navigate('/products')}>
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -155,33 +194,20 @@ const ProductFormPage = () => {
               </div>
 
               <div>
-                <Label htmlFor="type">Product Type *</Label>
-                <Select 
-                  value={formData.type} 
-                  onValueChange={(value: ProductType) => setFormData({ ...formData, type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hardware">Hardware</SelectItem>
-                    <SelectItem value="software">Software</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
                 <Label htmlFor="category">Category *</Label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
+                <Select
+                  value={formData.categoryId}
+                  onValueChange={handleCategoryChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PRODUCT_CATEGORIES.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    {isLoading && <SelectItem value="__loading" disabled>Loading categories...</SelectItem>}
+                    {!isLoading && error && <SelectItem value="__error" disabled>{error}</SelectItem>}
+                    {!isLoading && !error && categories.length === 0 && <SelectItem value="__empty" disabled>No active categories</SelectItem>}
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -199,6 +225,36 @@ const ProductFormPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          {dynamicFields.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>{selectedCategory?.name || 'Category'} Details</CardTitle></CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                {dynamicFields.map(field => (
+                  <div key={field.id}>
+                    <Label htmlFor={`attribute-${field.fieldKey}`}>{field.fieldLabel}{field.isRequired ? ' *' : ''}</Label>
+                    {field.fieldType === 'select' ? (
+                      <Select
+                        value={String(formData.attributes[field.fieldKey] ?? '')}
+                        onValueChange={(value) => setFormData(current => ({ ...current, attributes: { ...current.attributes, [field.fieldKey]: value } }))}
+                      >
+                        <SelectTrigger id={`attribute-${field.fieldKey}`}><SelectValue placeholder={`Select ${field.fieldLabel}`} /></SelectTrigger>
+                        <SelectContent>{field.fieldOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`attribute-${field.fieldKey}`}
+                        type={field.fieldType}
+                        value={String(formData.attributes[field.fieldKey] ?? '')}
+                        onChange={(event) => setFormData(current => ({ ...current, attributes: { ...current.attributes, [field.fieldKey]: field.fieldType === 'number' ? Number(event.target.value) : event.target.value } }))}
+                        required={field.isRequired}
+                      />
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Pricing */}
           <Card>
@@ -255,91 +311,34 @@ const ProductFormPage = () => {
             </CardContent>
           </Card>
 
-          {/* Hardware-specific fields */}
-          {formData.type === 'hardware' && (
+          <Card>
+            <CardHeader><CardTitle>Inventory Details</CardTitle></CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <Label htmlFor="stockQuantity">Stock Quantity</Label>
+                <Input id="stockQuantity" type="number" min="0" value={formData.stockQuantity} onChange={(e) => setFormData({ ...formData, stockQuantity: parseInt(e.target.value) || 0 })} />
+              </div>
+                <div>
+                  <Label htmlFor="unitOfMeasure">Unit of measure</Label>
+                  <Input id="unitOfMeasure" value={formData.unitOfMeasure} onChange={(e) => setFormData({ ...formData, unitOfMeasure: e.target.value })} />
+                </div>
+                <div className="flex items-center justify-between sm:col-span-2">
+                  <div><Label>Cut to order</Label><p className="text-sm text-muted-foreground">Manage stock as batches or rolls</p></div>
+                  <Switch checked={formData.isCutToOrder} onCheckedChange={(checked) => setFormData({ ...formData, isCutToOrder: checked })} />
+                </div>
+            </CardContent>
+          </Card>
+
+          {formData.isCutToOrder && (
             <Card>
-              <CardHeader>
-                <CardTitle>Hardware Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="stockQuantity">Stock Quantity</Label>
-                  <Input
-                    id="stockQuantity"
-                    type="number"
-                    min="0"
-                    value={formData.stockQuantity}
-                    onChange={(e) => setFormData({ ...formData, stockQuantity: parseInt(e.target.value) || 0 })}
-                  />
+              <CardHeader><CardTitle>Product Batches</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Input placeholder="Batch or roll code" value={batchCode} onChange={(event) => setBatchCode(event.target.value)} />
+                  <Input type="number" min="0" placeholder="Total quantity" value={batchQuantity || ''} onChange={(event) => setBatchQuantity(Number(event.target.value))} />
+                  <Button type="button" variant="outline" onClick={addBatch}>Add batch</Button>
                 </div>
-
-                <div>
-                  <Label htmlFor="supplier">Supplier</Label>
-                  <Input
-                    id="supplier"
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    placeholder="Enter supplier name"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="warrantyPeriod">Warranty (months)</Label>
-                  <Input
-                    id="warrantyPeriod"
-                    type="number"
-                    min="0"
-                    value={formData.warrantyPeriod}
-                    onChange={(e) => setFormData({ ...formData, warrantyPeriod: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Software-specific fields */}
-          {formData.type === 'software' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Software Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="licenseType">License Type</Label>
-                  <Select 
-                    value={formData.licenseType} 
-                    onValueChange={(value: LicenseType) => setFormData({ ...formData, licenseType: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select license type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="single">Single User</SelectItem>
-                      <SelectItem value="multi-user">Multi-User</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="licenseQuantity">License Quantity</Label>
-                  <Input
-                    id="licenseQuantity"
-                    type="number"
-                    min="0"
-                    value={formData.licenseQuantity}
-                    onChange={(e) => setFormData({ ...formData, licenseQuantity: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="expiryDate">Expiry Date (optional)</Label>
-                  <Input
-                    id="expiryDate"
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  />
-                </div>
+                {batches.length > 0 && <div className="space-y-2">{batches.map(batch => <div key={batch.id} className="flex justify-between rounded-md border p-3 text-sm"><span>{batch.batchCode}</span><span>{batch.remainingQuantity} / {batch.totalQuantity} remaining</span></div>)}</div>}
               </CardContent>
             </Card>
           )}

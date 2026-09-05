@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer, Trash2 } from 'lucide-react';
-import { Product, HardwareProduct, SoftwareProduct, PRODUCT_CATEGORIES } from '@/types';
+import { Product, HardwareProduct, SoftwareProduct } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { LabelPrintDialog } from '@/components/LabelPrintDialog';
 import {
@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const ProductsPage = () => {
-  const { products, archiveProduct, deleteProduct } = useData();
+  const { products, categories, archiveProduct, deleteProduct } = useData();
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -250,8 +250,8 @@ const ProductsPage = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {PRODUCT_CATEGORIES.map(cat => (
-              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+            {categories.map(category => (
+              <SelectItem key={category.id} value={category.name}>{category.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
