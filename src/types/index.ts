@@ -115,6 +115,7 @@ export interface Quotation {
 // Invoice/Billing Types
 export type PaymentMode = 'cash' | 'online' | 'bank' | 'credit';
 export type InvoiceStatus = 'pending' | 'partial' | 'paid' | 'cancelled';
+export type PaymentStatus = 'pending' | 'paid' | 'overdue';
 
 export interface InvoiceItem {
   id: string;
@@ -145,6 +146,7 @@ export interface Invoice {
   grandTotal: number;
   amountPaid: number;
   amountDue: number;
+  paymentStatus?: PaymentStatus;
   paymentMode: PaymentMode;
   status: InvoiceStatus;
   createdBy: string;

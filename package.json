@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "test:reports": "node --experimental-strip-types scripts/smoke-reports.ts",
+    "seed:overdue-credit": "node scripts/seed-overdue-credit.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

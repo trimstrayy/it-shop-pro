@@ -8,6 +8,7 @@ import { DataProvider } from "@/contexts/DataContext";
 import { AccessGate } from "@/components/layout/AccessGate";
 import { UserRole } from "@/types";
 import { supabaseConfigurationError } from "@/lib/supabase";
+import { CreditReminderGate } from "@/components/credits/CreditReminderGate";
 
 // Pages
 import LoginPage from "./pages/LoginPage";
@@ -57,6 +58,7 @@ const App = () => {
       <AuthProvider>
         <DataProvider>
           <BrowserRouter>
+            <CreditReminderGate />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />

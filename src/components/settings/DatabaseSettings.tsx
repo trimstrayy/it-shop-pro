@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { supabase, supabaseConfigurationError } from '@/lib/supabase';
 import { useData } from '@/contexts/DataContext';
+import { CreditReminderDevSeed } from '@/components/credits/CreditReminderDevSeed';
 
 type ConnectionStatus = 'checking' | 'not-configured' | 'connected' | 'unreachable';
 
@@ -50,7 +51,8 @@ const DatabaseSettings = () => {
   const badge = CONNECTION_BADGES[status];
 
   return (
-    <Card>
+    <div className="space-y-6">
+      <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Database className="h-5 w-5" />
@@ -117,6 +119,9 @@ const DatabaseSettings = () => {
         </div>
       </CardContent>
     </Card>
+
+      {import.meta.env.DEV && <CreditReminderDevSeed />}
+    </div>
   );
 };
 

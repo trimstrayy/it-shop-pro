@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
 import { Product, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
@@ -31,6 +32,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
 type ProductFilter = 'all' | string;
+type StockFilter = 'all' | 'in_stock' | 'out_of_stock';
 type InvoiceSortKey = 'clientName' | 'createdAt' | 'grandTotal';
 type SortDirection = 'asc' | 'desc';
 type InvoiceFilterStatus = 'all' | Invoice['status'];
@@ -54,6 +56,7 @@ const BillingPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [amountPaid, setAmountPaid] = useState<number>(0);
@@ -208,7 +211,13 @@ const BillingPage = () => {
       product.productCode.toLowerCase().includes(normalizedSearch) ||
       product.barcode.includes(searchTerm);
 
-    return matchesFilter && matchesSearch;
+    const stock = getStock(product);
+    const matchesStock =
+      stockFilter === 'all' ||
+      (stockFilter === 'in_stock' && stock > 0) ||
+      (stockFilter === 'out_of_stock' && stock === 0);
+
+    return matchesFilter && matchesSearch && matchesStock;
   }).sort((left, right) => {
     const leftAvailability = left.status === 'active' && getStock(left) > 0 ? 0 : left.status === 'active' ? 1 : 2;
     const rightAvailability = right.status === 'active' && getStock(right) > 0 ? 0 : right.status === 'active' ? 1 : 2;
@@ -620,6 +629,22 @@ const BillingPage = () => {
                             ))}
                           </SelectContent>
                         </Select>
+                        <Label className="shrink-0 text-sm sm:ml-3">Stock</Label>
+                        <ToggleGroup
+                          type="single"
+                          variant="outline"
+                          size="sm"
+                          value={stockFilter}
+                          onValueChange={(value) => {
+                            if (value) setStockFilter(value as StockFilter);
+                          }}
+                          className="w-full justify-start sm:w-auto"
+                          aria-label="Filter products by stock availability"
+                        >
+                          <ToggleGroupItem value="all" className="flex-1 sm:flex-none">All</ToggleGroupItem>
+                          <ToggleGroupItem value="in_stock" className="flex-1 sm:flex-none">In Stock</ToggleGroupItem>
+                          <ToggleGroupItem value="out_of_stock" className="flex-1 sm:flex-none">Out of Stock</ToggleGroupItem>
+                        </ToggleGroup>
                       </div>
                       <div className="max-h-64 overflow-y-auto space-y-1">
                         {filteredProducts.slice(0, 15).map(product => {
