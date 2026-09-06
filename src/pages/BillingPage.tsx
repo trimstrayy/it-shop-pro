@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
-import { Product, HardwareProduct, SoftwareProduct, InvoiceItem, Invoice, PaymentMode } from '@/types';
+import { Product, InvoiceItem, Invoice, PaymentMode } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
@@ -191,8 +191,13 @@ const BillingPage = () => {
     }
   }, [repairId, repairJobs]);
 
-  const activeProducts = products.filter(p => p.status === 'active');
-  const filteredProducts = activeProducts.filter(product => {
+  // Show sale-ready products first, then active products with no stock, and
+  // keep inactive products at the bottom for visibility without allowing sale.
+  const getStock = (product: Product): number => {
+    return Number((product as Product & { stockQuantity?: number }).stockQuantity ?? 0);
+  };
+
+  const filteredProducts = products.filter(product => {
     const matchesFilter =
       productFilter === 'all' ||
       product.categoryId === productFilter || product.category === productFilter;
@@ -204,17 +209,23 @@ const BillingPage = () => {
       product.barcode.includes(searchTerm);
 
     return matchesFilter && matchesSearch;
+  }).sort((left, right) => {
+    const leftAvailability = left.status === 'active' && getStock(left) > 0 ? 0 : left.status === 'active' ? 1 : 2;
+    const rightAvailability = right.status === 'active' && getStock(right) > 0 ? 0 : right.status === 'active' ? 1 : 2;
+    return leftAvailability - rightAvailability || left.name.localeCompare(right.name);
   });
-
-  // Helper to get available stock for any product
-  const getStock = (product: Product): number => {
-    return product.type === 'hardware'
-      ? (product as HardwareProduct).stockQuantity
-      : (product as SoftwareProduct).licenseQuantity;
-  };
 
   const addItem = (product: Product) => {
     const stock = getStock(product);
+
+    if (product.status !== 'active') {
+      toast({
+        title: 'Inactive Product',
+        description: `${product.name} is inactive and cannot be added to a bill.`,
+        variant: 'destructive',
+      });
+      return;
+    }
 
     if (stock === 0) {
       toast({
@@ -622,16 +633,22 @@ const BillingPage = () => {
                                 setShowProductSearch(false);
                               }}
                               className="w-full flex items-center justify-between p-3 hover:bg-background rounded-lg transition-colors text-left"
-                              disabled={stock === 0}
+                              disabled={stock === 0 || product.status !== 'active'}
+                              title={product.status !== 'active'
+                                ? 'This product is inactive.'
+                                : stock === 0
+                                  ? 'This product has zero stock. Edit the product to add stock before billing.'
+                                  : 'Add product to cart'}
                             >
                               <div>
                                 <p className="font-medium">{product.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {product.productCode} • {stock > 0 ? `${stock} available` : 'Out of stock'}
+                                  {product.productCode} • {product.status !== 'active' ? 'Inactive' : stock > 0 ? `${stock} available` : 'Out of stock'}
                                 </p>
                               </div>
                               <div className="text-right">
                                 <span className="font-bold text-primary">NPR {product.sellingPrice.toLocaleString()}</span>
+                                {product.status !== 'active' ? <span className="block text-xs text-muted-foreground">Inactive</span> : stock === 0 && <span className="block text-xs text-destructive">Out of stock</span>}
                                 <p className="text-xs text-muted-foreground">{product.type}</p>
                               </div>
                             </button>

@@ -25,6 +25,10 @@ export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateP
     return <Navigate to="/platform-admin" replace />;
   }
 
+  if (user?.accountType?.toLowerCase().includes('furniture') && location.pathname === '/lab') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   if (!hasPermission(allowedRoles)) {
     return <Navigate to={fallbackPath} replace />;
   }

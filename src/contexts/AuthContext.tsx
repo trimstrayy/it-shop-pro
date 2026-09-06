@@ -50,12 +50,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return null;
     }
 
+    const { data: tenant } = data.tenant_id
+      ? await supabase.from('tenants').select('business_type').eq('id', data.tenant_id).maybeSingle()
+      : { data: null };
+
     const mappedUser: User = {
       id: data.id,
       email: data.email,
       name: data.name,
       role: data.role,
       tenantId: data.tenant_id ?? null,
+      accountType: tenant?.business_type ?? null,
       isPlatformAdmin: Boolean(data.is_platform_admin),
       avatar: data.avatar_url || undefined,
       createdAt: new Date(data.created_at),

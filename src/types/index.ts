@@ -7,6 +7,7 @@ export interface User {
   name: string;
   role: UserRole;
   tenantId: string | null;
+  accountType: string | null;
   isPlatformAdmin: boolean;
   avatar?: string;
   createdAt: Date;

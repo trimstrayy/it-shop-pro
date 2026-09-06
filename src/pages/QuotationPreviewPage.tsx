@@ -8,20 +8,13 @@ import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { ArrowLeft, Printer, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useRef } from 'react';
-
-// Company Information
-const COMPANY_INFO = {
-  name: 'IT Gadget Hub',
-  address: 'Banepa',
-  zipCode: '45210',
-  phone: '9741740000',
-  email: 'ayush11dahal@gmail.com',
-};
+import { useCompanyInfo } from '@/lib/branding';
 
 const QuotationPreviewPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { quotations, updateQuotation } = useData();
+  const companyInfo = useCompanyInfo();
   const previewRef = useRef<HTMLDivElement>(null);
 
   const quotation = quotations.find(q => q.id === id);
@@ -280,7 +273,7 @@ const QuotationPreviewPage = () => {
               <div class="brand">
                 <div class="brand-mark">ITG</div>
                 <div>
-                  <h2 class="brand-name">${COMPANY_INFO.name}</h2>
+                  <h2 class="brand-name">${companyInfo.name}</h2>
                   <p class="brand-tagline">Your IT Solutions Partner</p>
                 </div>
               </div>
@@ -294,11 +287,10 @@ const QuotationPreviewPage = () => {
               <div class="info-section">
                 <h4>From</h4>
                 <div class="details">
-                  <p style="font-weight:600;">${COMPANY_INFO.name}</p>
-                  <p>${COMPANY_INFO.address}</p>
-                  <p>ZIP: ${COMPANY_INFO.zipCode}</p>
-                  <p>Phone: ${COMPANY_INFO.phone}</p>
-                  <p>Email: ${COMPANY_INFO.email}</p>
+                  <p style="font-weight:600;">${companyInfo.name}</p>
+                  <p>${companyInfo.address}</p>
+                  <p>Phone: ${companyInfo.phone}</p>
+                  <p>Email: ${companyInfo.email}</p>
                 </div>
               </div>
               <div class="info-section">
@@ -378,7 +370,7 @@ const QuotationPreviewPage = () => {
               <div class="signature">
                 <div class="signature-line"></div>
                 <div class="signature-label">Authorized By</div>
-                <div class="signature-name">${COMPANY_INFO.name}</div>
+                <div class="signature-name">${companyInfo.name}</div>
               </div>
               <div class="signature">
                 <div class="signature-line"></div>
@@ -387,7 +379,7 @@ const QuotationPreviewPage = () => {
               </div>
             </div>
 
-            <div class="copyright">© ${new Date().getFullYear()} ${COMPANY_INFO.name}. Thank you for your business!</div>
+            <div class="copyright">© ${new Date().getFullYear()} ${companyInfo.name}. Thank you for your business!</div>
           </div>
         </body>
       </html>
@@ -501,7 +493,7 @@ const QuotationPreviewPage = () => {
                     ITG
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-teal-700">{COMPANY_INFO.name}</h2>
+                    <h2 className="text-xl font-bold text-teal-700">{companyInfo.name}</h2>
                     <p className="text-gray-600 text-sm">Your IT Solutions Partner</p>
                   </div>
                 </div>
@@ -516,11 +508,10 @@ const QuotationPreviewPage = () => {
                 <div>
                   <h4 className="text-xs font-semibold text-teal-700 uppercase mb-2 tracking-wider">From</h4>
                   <div className="text-sm space-y-1">
-                    <p className="font-semibold">{COMPANY_INFO.name}</p>
-                    <p>{COMPANY_INFO.address}</p>
-                    <p>ZIP: {COMPANY_INFO.zipCode}</p>
-                    <p>Phone: {COMPANY_INFO.phone}</p>
-                    <p>Email: {COMPANY_INFO.email}</p>
+                    <p className="font-semibold">{companyInfo.name}</p>
+                    <p>{companyInfo.address}</p>
+                    <p>Phone: {companyInfo.phone}</p>
+                    <p>Email: {companyInfo.email}</p>
                   </div>
                 </div>
                 <div>
@@ -616,7 +607,7 @@ const QuotationPreviewPage = () => {
                 <div className="text-center">
                   <div className="w-48 border-t border-gray-400 pt-2">
                     <p className="text-sm text-gray-600">Authorized By</p>
-                    <p className="text-xs text-gray-400 mt-1">{COMPANY_INFO.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{companyInfo.name}</p>
                   </div>
                 </div>
                 <div className="text-center">
@@ -629,7 +620,7 @@ const QuotationPreviewPage = () => {
 
               <div className="text-center mt-8 pt-4 border-t border-gray-200">
                 <p className="text-xs text-gray-400">
-                  © {new Date().getFullYear()} {COMPANY_INFO.name}. Thank you for your business!
+                  © {new Date().getFullYear()} {companyInfo.name}. Thank you for your business!
                 </p>
               </div>
             </div>

@@ -57,11 +57,15 @@ export interface CompanyInfo {
   phone: string;
   email: string;
   panNumber: string;
+  quotationValidityDays: number;
+  quotationTerms: string;
 }
 
 const DEFAULT_COMPANY_INFO: CompanyInfo = {
   ...COMPANY_INFO,
   panNumber: PAN_NUMBER,
+  quotationValidityDays: 15,
+  quotationTerms: 'Payment Terms:\n• 50% advance payment required\n• Balance due upon delivery\n• Prices valid for {validity_days} days from quotation date',
 };
 
 let companyInfo: CompanyInfo = { ...DEFAULT_COMPANY_INFO };

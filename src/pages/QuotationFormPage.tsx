@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCompanyInfo } from '@/lib/branding';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
@@ -11,23 +12,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Plus, Trash2, Search, Printer, Download, FileText } from 'lucide-react';
-import { QuotationItem, Product, HardwareProduct, SoftwareProduct } from '@/types';
+import { QuotationItem, Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
-// Company Information
-const COMPANY_INFO = {
-  name: 'IT Gadget Hub',
-  address: 'Banepa',
-  zipCode: '45210',
-  phone: '9741740000',
-  email: 'ayush11dahal@gmail.com',
-};
-
 const QuotationFormPage = () => {
   const navigate = useNavigate();
-  const { products, addQuotation, quotations } = useData();
+  const { products, categories, addQuotation, quotations } = useData();
   const { user } = useAuth();
+  const companyInfo = useCompanyInfo();
   const previewRef = useRef<HTMLDivElement>(null);
 
   // Auto-generate quotation number
@@ -43,19 +36,21 @@ const QuotationFormPage = () => {
   });
 
   const [items, setItems] = useState<QuotationItem[]>([]);
-  const [notes, setNotes] = useState('Payment Terms:\n• 50% advance payment required\n• Balance due upon delivery\n• Prices valid for 15 days from quotation date');
-  const [validDays, setValidDays] = useState(15);
+  const [notes, setNotes] = useState(() => companyInfo.quotationTerms);
+  const [validDays, setValidDays] = useState(companyInfo.quotationValidityDays);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [showProductSearch, setShowProductSearch] = useState(false);
 
   const activeProducts = products.filter(p => p.status === 'active');
-  const filteredProducts = searchTerm 
-    ? activeProducts.filter(p => 
+  const filteredProducts = activeProducts.filter(p => {
+    const matchesCategory = categoryFilter === 'all' || p.categoryId === categoryFilter || p.category === categories.find(category => category.id === categoryFilter)?.name;
+    const matchesSearch = !searchTerm ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.barcode.includes(searchTerm)
-      )
-    : activeProducts;
+        p.barcode.includes(searchTerm);
+    return matchesCategory && matchesSearch;
+  });
 
   const addItem = (product: Product) => {
     const existingItem = items.find(i => i.productId === product.id);
@@ -128,6 +123,7 @@ const QuotationFormPage = () => {
 
   const validUntilDate = new Date();
   validUntilDate.setDate(validUntilDate.getDate() + validDays);
+  const renderedNotes = notes.replaceAll('{validity_days}', String(validDays));
 
   const buildPrintableQuotation = () => {
     const quoteNumber = nextQuotationNumber;
@@ -368,10 +364,10 @@ const QuotationFormPage = () => {
           <div class="quotation-preview">
             <div class="header">
               <div class="brand">
-                <div class="brand-mark">ITG</div>
+                <div class="brand-mark">${companyInfo.name.slice(0, 3).toUpperCase()}</div>
                 <div>
-                  <h2 class="brand-name">${COMPANY_INFO.name}</h2>
-                  <p class="brand-tagline">Your IT Solutions Partner</p>
+                  <h2 class="brand-name">${companyInfo.name}</h2>
+                  <p class="brand-tagline">${companyInfo.tagline}</p>
                 </div>
               </div>
               <div class="title-block">
@@ -384,11 +380,10 @@ const QuotationFormPage = () => {
               <div class="info-section">
                 <h4>From</h4>
                 <div class="details">
-                  <p style="font-weight:600;">${COMPANY_INFO.name}</p>
-                  <p>${COMPANY_INFO.address}</p>
-                  <p>ZIP: ${COMPANY_INFO.zipCode}</p>
-                  <p>Phone: ${COMPANY_INFO.phone}</p>
-                  <p>Email: ${COMPANY_INFO.email}</p>
+                  <p style="font-weight:600;">${companyInfo.name}</p>
+                  <p>${companyInfo.address}</p>
+                  <p>Phone: ${companyInfo.phone}</p>
+                  <p>Email: ${companyInfo.email}</p>
                 </div>
               </div>
               <div class="info-section">
@@ -457,10 +452,10 @@ const QuotationFormPage = () => {
               </div>
             </div>
 
-            ${notes ? `
+            ${renderedNotes ? `
               <div class="notes">
                 <h4>Terms & Conditions</h4>
-                <p>${notes.replace(/\n/g, '<br/>')}</p>
+                <p>${renderedNotes.replace(/\n/g, '<br/>')}</p>
               </div>
             ` : ''}
 
@@ -468,7 +463,7 @@ const QuotationFormPage = () => {
               <div class="signature">
                 <div class="signature-line"></div>
                 <div class="signature-label">Authorized By</div>
-                <div class="signature-name">${COMPANY_INFO.name}</div>
+                <div class="signature-name">${companyInfo.name}</div>
               </div>
               <div class="signature">
                 <div class="signature-line"></div>
@@ -477,7 +472,7 @@ const QuotationFormPage = () => {
               </div>
             </div>
 
-            <div class="copyright">© ${new Date().getFullYear()} ${COMPANY_INFO.name}. Thank you for your business!</div>
+            <div class="copyright">© ${new Date().getFullYear()} ${companyInfo.name}. Thank you for your business!</div>
           </div>
         </body>
       </html>
@@ -519,7 +514,7 @@ const QuotationFormPage = () => {
       grandTotal,
       status: 'draft',
       validUntil: validUntilDate,
-      notes,
+      notes: renderedNotes,
       createdBy: user?.id || '',
     });
 
@@ -650,11 +645,13 @@ const QuotationFormPage = () => {
                         autoFocus
                       />
                     </div>
+                    <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="mb-3 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                      <option value="all">All Categories</option>
+                      {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </select>
                     <div className="max-h-64 overflow-y-auto space-y-1">
                       {filteredProducts.map(product => {
-                        const stock = product.type === 'hardware' 
-                          ? (product as HardwareProduct).stockQuantity
-                          : (product as SoftwareProduct).licenseQuantity;
+                        const stock = Number((product as Product & { stockQuantity?: number }).stockQuantity ?? 0);
                         return (
                           <button
                             key={product.id}
@@ -799,7 +796,7 @@ const QuotationFormPage = () => {
                         ITG
                       </div>
                       <div>
-                        <h2 className="text-xl font-bold text-teal-700">{COMPANY_INFO.name}</h2>
+                        <h2 className="text-xl font-bold text-teal-700">{companyInfo.name}</h2>
                         <p className="text-gray-600 text-sm">Your IT Solutions Partner</p>
                       </div>
                     </div>
@@ -814,11 +811,10 @@ const QuotationFormPage = () => {
                     <div>
                       <h4 className="text-xs font-semibold text-teal-700 uppercase mb-2 tracking-wider">From</h4>
                       <div className="text-sm space-y-1">
-                        <p className="font-semibold">{COMPANY_INFO.name}</p>
-                        <p>{COMPANY_INFO.address}</p>
-                        <p>ZIP: {COMPANY_INFO.zipCode}</p>
-                        <p>Phone: {COMPANY_INFO.phone}</p>
-                        <p>Email: {COMPANY_INFO.email}</p>
+                        <p className="font-semibold">{companyInfo.name}</p>
+                        <p>{companyInfo.address}</p>
+                        <p>Phone: {companyInfo.phone}</p>
+                        <p>Email: {companyInfo.email}</p>
                       </div>
                     </div>
                     <div>
@@ -909,10 +905,10 @@ const QuotationFormPage = () => {
                   </div>
 
                   {/* Terms */}
-                  {notes && (
+                  {renderedNotes && (
                     <div className="bg-gray-50 p-4 rounded mb-8">
                       <h4 className="font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
-                      <div className="text-sm text-gray-600 whitespace-pre-line">{notes}</div>
+                      <div className="text-sm text-gray-600 whitespace-pre-line">{renderedNotes}</div>
                     </div>
                   )}
 
@@ -921,7 +917,7 @@ const QuotationFormPage = () => {
                     <div className="text-center">
                       <div className="w-48 border-t border-gray-400 pt-2">
                         <p className="text-sm text-gray-600">Authorized By</p>
-                        <p className="text-xs text-gray-400 mt-1">{COMPANY_INFO.name}</p>
+                        <p className="text-xs text-gray-400 mt-1">{companyInfo.name}</p>
                       </div>
                     </div>
                     <div className="text-center">
@@ -934,7 +930,7 @@ const QuotationFormPage = () => {
 
                   <div className="text-center mt-8 pt-4 border-t border-gray-200">
                     <p className="text-xs text-gray-400">
-                      © {new Date().getFullYear()} {COMPANY_INFO.name}. Thank you for your business!
+                      © {new Date().getFullYear()} {companyInfo.name}. Thank you for your business!
                     </p>
                   </div>
                 </div>

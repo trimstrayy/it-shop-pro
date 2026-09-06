@@ -31,7 +31,9 @@ const LoginPage = () => {
         });
         navigate(authenticatedUser.isPlatformAdmin
           ? '/platform-admin'
-          : authenticatedUser.role === 'admin' || authenticatedUser.role === 'technician' ? '/lab' : '/dashboard');
+          : authenticatedUser.role === 'admin' || authenticatedUser.role === 'technician'
+            ? authenticatedUser.accountType?.toLowerCase().includes('furniture') ? '/dashboard' : '/lab'
+            : '/dashboard');
       } else {
         setError('Invalid email or password');
       }

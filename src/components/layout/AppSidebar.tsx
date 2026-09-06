@@ -54,8 +54,9 @@ export const AppSidebar = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
+  const isFurnitureAccount = user?.accountType?.toLowerCase().includes('furniture');
   const filteredNavigation = navigation.filter(item =>
-    hasPermission(item.roles as UserRole[])
+    hasPermission(item.roles as UserRole[]) && !(isFurnitureAccount && item.href === '/lab')
   );
 
   console.log('[AppSidebar] user role', user?.role, 'filtered items', filteredNavigation.map(item => item.name));

@@ -10,7 +10,8 @@ const Index = () => {
 
   if (user?.isPlatformAdmin) return <Navigate to="/platform-admin" replace />;
 
-  return <Navigate to={user?.role === 'admin' || user?.role === 'technician' ? '/lab' : '/dashboard'} replace />;
+  const isFurnitureAccount = user?.accountType?.toLowerCase().includes('furniture');
+  return <Navigate to={user?.role === 'admin' || user?.role === 'technician' ? (isFurnitureAccount ? '/dashboard' : '/lab') : '/dashboard'} replace />;
 };
 
 export default Index;

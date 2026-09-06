@@ -21,7 +21,7 @@ import QuotationFormPage from "./pages/QuotationFormPage";
 import QuotationPreviewPage from "./pages/QuotationPreviewPage";
 import BillingPage from "./pages/BillingPage";
 import BillingInvoiceDetailPage from "./pages/BillingInvoiceDetailPage";
-import DeliveriesPage from "./pages/DeliveriesPage";
+import ComingSoonPage from "./pages/ComingSoonPage";
 import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
@@ -72,7 +72,7 @@ const App = () => {
               <Route path="/quotations/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationFormPage /></AccessGate>} />
               <Route path="/quotations/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationPreviewPage /></AccessGate>} />
               <Route path="/dashboard" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DashboardPage /></AccessGate>} />
-              <Route path="/deliveries" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DeliveriesPage /></AccessGate>} />
+              <Route path="/deliveries" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/dashboard"><ComingSoonPage title="Deliveries" description="Delivery tracking is being prepared." /></AccessGate>} />
               <Route path="/reports" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ReportsPage /></AccessGate>} />
               <Route path="/credits" element={<AccessGate allowedRoles={['admin', 'accountant']} fallbackPath="/dashboard"><CreditsPage /></AccessGate>} />
               <Route path="/settings" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><SettingsPage /></AccessGate>} />

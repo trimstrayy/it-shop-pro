@@ -63,6 +63,11 @@ const BillingInvoiceDetailPage = () => {
   return (
     <AppLayout className="billing-invoice-detail-shell">
       <style>{`
+        @page {
+          margin: 0;
+          size: auto;
+        }
+
         @media print {
           .billing-invoice-detail-shell aside,
           .billing-invoice-detail-shell .no-print {
@@ -75,6 +80,18 @@ const BillingInvoiceDetailPage = () => {
 
           .billing-invoice-detail-shell main > div {
             padding: 0 !important;
+          }
+
+          .billing-invoice-detail-shell main > div > .space-y-6 > :not(.print-invoice) {
+            display: none !important;
+          }
+
+          .billing-invoice-detail-shell .print-invoice {
+            display: block !important;
+            width: 100% !important;
+            margin: 0 !important;
+            border: 0 !important;
+            box-shadow: none !important;
           }
 
           body {
@@ -162,7 +179,7 @@ const BillingInvoiceDetailPage = () => {
             </CardContent>
           </Card>
 
-          <InvoiceReceipt invoice={invoice} />
+          <InvoiceReceipt invoice={invoice} className="print-invoice" />
 
           {invoice.amountDue > 0 && (
             <Card className="no-print">

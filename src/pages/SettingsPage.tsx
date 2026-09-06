@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
@@ -25,6 +26,8 @@ const SettingsPage = () => {
     phone: companyInfo.phone,
     email: companyInfo.email,
     panNumber: companyInfo.panNumber,
+    quotationValidityDays: String(companyInfo.quotationValidityDays),
+    quotationTerms: companyInfo.quotationTerms,
   });
 
   const handleCompanyFieldChange = (field: keyof typeof companyForm, value: string) => {
@@ -39,6 +42,8 @@ const SettingsPage = () => {
       phone: companyForm.phone,
       email: companyForm.email,
       panNumber: companyForm.panNumber,
+      quotationValidityDays: Number(companyForm.quotationValidityDays) || 15,
+      quotationTerms: companyForm.quotationTerms,
     });
     toast({
       title: 'Company Info Saved',
@@ -225,7 +230,11 @@ const SettingsPage = () => {
               </div>
               <div>
                 <Label htmlFor="quotationValidity">Quotation Validity (days)</Label>
-                <Input id="quotationValidity" type="number" defaultValue="15" />
+                <Input id="quotationValidity" type="number" min="1" value={companyForm.quotationValidityDays} onChange={(e) => handleCompanyFieldChange('quotationValidityDays', e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label htmlFor="quotationTerms">Default Quotation Terms & Conditions</Label>
+                <Textarea id="quotationTerms" rows={5} value={companyForm.quotationTerms} onChange={(e) => handleCompanyFieldChange('quotationTerms', e.target.value)} placeholder="Use {validity_days} where the validity period should appear." />
               </div>
             </div>
             <Button>Save System Settings</Button>
