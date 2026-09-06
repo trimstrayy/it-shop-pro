@@ -13,6 +13,11 @@ export interface User {
   createdAt: Date;
 }
 
+export interface UpdateProfileResult {
+  error: string | null;
+  emailConfirmationPending: boolean;
+}
+
 // Product Types
 export type ProductType = 'hardware' | 'software';
 export type ProductStatus = 'active' | 'inactive';

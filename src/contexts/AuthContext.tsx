@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '@/types';
+import { User, UserRole, UpdateProfileResult } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
+  updateProfile: (updates: { name?: string; email?: string }) => Promise<UpdateProfileResult>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -151,6 +152,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     void supabase.auth.signOut();
   };
 
+  /**
+   * Update the signed-in user's profile.
+   *
+   * Name changes are written to both the Auth metadata and the public.profiles
+   * row (allowed by the profiles_user_self_update RLS policy). Email changes go
+   * through Supabase Auth only — a dedicated DB trigger keeps public.profiles in
+   * sync, because the RLS policy intentionally prevents clients from editing the
+   * email column of their own profile row.
+   */
+  const updateProfile = async (updates: { name?: string; email?: string }): Promise<UpdateProfileResult> => {
+    const session = (await supabase.auth.getSession()).data.session;
+    if (!session?.user || !user) {
+      return { error: 'You must be signed in to update your profile.', emailConfirmationPending: false };
+    }
+
+    const trimmedName = updates.name === undefined ? '' : updates.name.trim();
+    const normalizedEmail = updates.email === undefined ? '' : updates.email.trim().toLowerCase();
+
+    const hasNameChange = updates.name !== undefined && trimmedName !== user.name;
+    const hasEmailChange = updates.email !== undefined && normalizedEmail !== user.email;
+
+    const authUpdates: { email?: string; data?: { name?: string } } = {};
+    if (hasEmailChange) authUpdates.email = normalizedEmail;
+    if (hasNameChange) authUpdates.data = { name: trimmedName };
+
+    let emailConfirmationPending = false;
+    if (Object.keys(authUpdates).length > 0) {
+      const { data: authData, error } = await supabase.auth.updateUser(authUpdates);
+      if (error) return { error: error.message, emailConfirmationPending: false };
+      // When the project requires email confirmation, the new address is stored
+      // on new_email and the current email only changes after confirmation.
+      emailConfirmationPending = Boolean(authData.user?.new_email);
+    }
+
+    if (hasNameChange) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ name: trimmedName })
+        .eq('auth_user_id', session.user.id);
+
+      if (profileError) return { error: profileError.message, emailConfirmationPending: false };
+    }
+
+    await loadProfile(session);
+
+    return { error: null, emailConfirmationPending };
+  };
+
   const hasPermission = (roles: UserRole[]): boolean => {
     if (!user) return false;
     if (user.role === 'admin') return true; // Admin has full access
@@ -158,7 +207,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isInitializing, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isInitializing, login, logout, hasPermission, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
