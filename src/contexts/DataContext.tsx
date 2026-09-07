@@ -635,8 +635,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       ...('stockQuantity' in updates ? { stock_quantity: updates.stockQuantity } : {}),
       ...('supplier' in updates ? { supplier: updates.supplier } : {}),
       ...('warrantyPeriod' in updates ? { warranty_period: updates.warrantyPeriod } : {}),
-    }).eq('id', id).then(({ error: updateError }) => {
-      if (updateError) toast({ title: 'Product update failed', description: updateError.message, variant: 'destructive' });
+    }).eq('id', id).select().then(({ data, error }) => {
+      console.log('RESTOCK UPDATE RESULT:', { data, error });
+      if (error) toast({ title: 'Product update failed', description: error.message, variant: 'destructive' });
     });
   };
 
