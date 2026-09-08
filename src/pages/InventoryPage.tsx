@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Package, AlertTriangle, CheckCircle, XCircle, History, Plus } from 'lucide-react';
-import { HardwareProduct, SoftwareProduct, InventoryLog } from '@/types';
+import { Product, InventoryLog, getProductQuantity, getProductQuantityLabel } from '@/types';
 import { format } from 'date-fns';
 
 const InventoryPage = () => {
@@ -48,10 +48,7 @@ const InventoryPage = () => {
       return;
     }
 
-    const currentQty =
-      selectedProduct.type === 'hardware'
-        ? (selectedProduct as HardwareProduct).stockQuantity
-        : (selectedProduct as SoftwareProduct).licenseQuantity;
+    const currentQty = getProductQuantity(selectedProduct);
 
     if (currentQty + amount < 0) {
       setUpdateError('Stock cannot go below zero.');
@@ -72,27 +69,21 @@ const InventoryPage = () => {
 
   // Calculate inventory stats
   const inStockProducts = products.filter(p => {
-    if (p.type === 'hardware') return (p as HardwareProduct).stockQuantity > 5;
-    return (p as SoftwareProduct).licenseQuantity > 5;
+    return getProductQuantity(p) > 5;
   }).length;
 
   const lowStockProducts = products.filter(p => {
-    if (p.type === 'hardware') {
-      const qty = (p as HardwareProduct).stockQuantity;
-      return qty > 0 && qty <= 5;
-    }
-    const qty = (p as SoftwareProduct).licenseQuantity;
+    const qty = getProductQuantity(p);
     return qty > 0 && qty <= 5;
   });
 
   const outOfStockProducts = products.filter(p => {
-    if (p.type === 'hardware') return (p as HardwareProduct).stockQuantity === 0;
-    return (p as SoftwareProduct).licenseQuantity === 0;
+    return getProductQuantity(p) === 0;
   });
 
   const totalSoftwareLicenses = products
     .filter(p => p.type === 'software')
-    .reduce((sum, p) => sum + (p as SoftwareProduct).licenseQuantity, 0);
+    .reduce((sum, p) => sum + getProductQuantity(p), 0);
 
   const stockColumns = [
     {
@@ -115,23 +106,16 @@ const InventoryPage = () => {
     {
       key: 'type',
       header: 'Type',
-      cell: (product: typeof products[0]) => (
-        <StatusBadge
-          status={product.type}
-          variant={product.type === 'hardware' ? 'info' : 'success'}
-        />
-      ),
+      cell: (product: Product) => product.type ? (
+        <StatusBadge status={product.type} variant={product.type === 'hardware' ? 'info' : 'success'} />
+      ) : <span className="text-sm text-muted-foreground">{product.category}</span>,
     },
     {
       key: 'stock',
       header: 'Stock/Licenses',
       cell: (product: typeof products[0]) => {
-        const qty =
-          product.type === 'hardware'
-            ? (product as HardwareProduct).stockQuantity
-            : (product as SoftwareProduct).licenseQuantity;
-
-        const label = product.type === 'hardware' ? 'units' : 'licenses';
+        const qty = getProductQuantity(product);
+        const label = getProductQuantityLabel(product);
 
         if (qty === 0) return <StatusBadge status="Out of Stock" variant="danger" />;
         if (qty <= 5) return <StatusBadge status={`${qty} ${label} - Low`} variant="warning" />;
@@ -142,10 +126,7 @@ const InventoryPage = () => {
       key: 'status',
       header: 'Status',
       cell: (product: typeof products[0]) => {
-        const qty =
-          product.type === 'hardware'
-            ? (product as HardwareProduct).stockQuantity
-            : (product as SoftwareProduct).licenseQuantity;
+        const qty = getProductQuantity(product);
 
         if (qty === 0) return <StatusBadge status="Out of Stock" variant="danger" />;
         if (qty <= 5) return <StatusBadge status="Low Stock" variant="warning" />;
@@ -281,9 +262,7 @@ const InventoryPage = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-warning">
-                        {product.type === 'hardware'
-                          ? `${(product as HardwareProduct).stockQuantity} units`
-                          : `${(product as SoftwareProduct).licenseQuantity} licenses`}
+                        {`${getProductQuantity(product)} ${getProductQuantityLabel(product)}`}
                       </span>
                       {/* Admin-only quick update button in alert card */}
                       {isAdmin && (
@@ -402,9 +381,7 @@ const InventoryPage = () => {
                   <p className="text-sm mt-1">
                     Current stock:{' '}
                     <span className="font-semibold">
-                      {selectedProduct.type === 'hardware'
-                        ? `${(selectedProduct as HardwareProduct).stockQuantity} units`
-                        : `${(selectedProduct as SoftwareProduct).licenseQuantity} licenses`}
+                      {`${getProductQuantity(selectedProduct)} ${getProductQuantityLabel(selectedProduct)}`}
                     </span>
                   </p>
                 </div>

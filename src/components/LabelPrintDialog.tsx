@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Printer, Package } from 'lucide-react';
-import { Product, HardwareProduct, SoftwareProduct } from '@/types';
+import { Product, getProductQuantity } from '@/types';
 import JsBarcode from 'jsbarcode';
 
 interface LabelPrintDialogProps {
@@ -56,10 +56,7 @@ export const LabelPrintDialog = ({ open, onOpenChange, products }: LabelPrintDia
   }, [selectedProducts]);
 
   const getMaxQuantity = (product: Product) => {
-    if (product.type === 'hardware') {
-      return Math.max(1, (product as HardwareProduct).stockQuantity || 0);
-    }
-    return Math.max(1, (product as SoftwareProduct).licenseQuantity || 0);
+    return Math.max(1, getProductQuantity(product));
   };
 
   const toggleProduct = (product: Product) => {

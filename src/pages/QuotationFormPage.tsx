@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Plus, Trash2, Search, Printer, Download, FileText } from 'lucide-react';
-import { QuotationItem, Product } from '@/types';
+import { QuotationItem, Product, getProductQuantity } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -651,7 +651,7 @@ const QuotationFormPage = () => {
                     </select>
                     <div className="max-h-64 overflow-y-auto space-y-1">
                       {filteredProducts.map(product => {
-                        const stock = Number((product as Product & { stockQuantity?: number }).stockQuantity ?? 0);
+                        const stock = getProductQuantity(product);
                         return (
                           <button
                             key={product.id}
@@ -661,7 +661,7 @@ const QuotationFormPage = () => {
                           >
                             <div>
                               <p className="font-medium">{product.name}</p>
-                              <p className="text-xs text-muted-foreground">{product.productCode} • {product.type} • {stock} available</p>
+                              <p className="text-xs text-muted-foreground">{product.productCode}{product.type ? ` • ${product.type}` : ''} • {stock} available</p>
                             </div>
                             <span className="font-semibold text-primary">Rs. {product.sellingPrice.toLocaleString()}</span>
                           </button>

@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer, Trash2 } from 'lucide-react';
-import { Product, HardwareProduct, SoftwareProduct } from '@/types';
+import { Product, getProductQuantity, getProductQuantityLabel } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { LabelPrintDialog } from '@/components/LabelPrintDialog';
 import {
@@ -67,17 +67,11 @@ const ProductsPage = () => {
   };
 
   const getStockDisplay = (product: Product) => {
-    if (product.type === 'hardware') {
-      const hw = product as HardwareProduct;
-      if (hw.stockQuantity === 0) return <StatusBadge status="Out of Stock" variant="danger" />;
-      if (hw.stockQuantity <= 5) return <StatusBadge status={`${hw.stockQuantity} units`} variant="warning" />;
-      return <span className="text-foreground">{hw.stockQuantity} units</span>;
-    } else {
-      const sw = product as SoftwareProduct;
-      if (sw.licenseQuantity === 0) return <StatusBadge status="No Licenses" variant="danger" />;
-      if (sw.licenseQuantity <= 5) return <StatusBadge status={`${sw.licenseQuantity} licenses`} variant="warning" />;
-      return <span className="text-foreground">{sw.licenseQuantity} licenses</span>;
-    }
+    const quantity = getProductQuantity(product);
+    const label = getProductQuantityLabel(product);
+    if (quantity === 0) return <StatusBadge status={product.type === 'software' ? 'No Licenses' : 'Out of Stock'} variant="danger" />;
+    if (quantity <= 5) return <StatusBadge status={`${quantity} ${label}`} variant="warning" />;
+    return <span className="text-foreground">{quantity} {label}</span>;
   };
 
   const columns = [
@@ -101,12 +95,9 @@ const ProductsPage = () => {
     {
       key: 'type',
       header: 'Type',
-      cell: (product: Product) => (
-        <StatusBadge 
-          status={product.type} 
-          variant={product.type === 'hardware' ? 'info' : 'success'} 
-        />
-      ),
+      cell: (product: Product) => product.type ? (
+        <StatusBadge status={product.type} variant={product.type === 'hardware' ? 'info' : 'success'} />
+      ) : <span className="text-sm text-muted-foreground">{product.category}</span>,
     },
     {
       key: 'price',

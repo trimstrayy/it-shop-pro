@@ -21,7 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { HardwareProduct, SoftwareProduct } from '@/types';
+import { getProductQuantity } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -37,16 +37,11 @@ const DashboardPage = () => {
   // Calculate stats
   const activeProducts = products.filter(p => p.status === 'active').length;
   const lowStockProducts = products.filter(p => {
-    if (p.type === 'hardware') {
-      return (p as HardwareProduct).stockQuantity > 0 && (p as HardwareProduct).stockQuantity <= 5;
-    }
-    return (p as SoftwareProduct).licenseQuantity > 0 && (p as SoftwareProduct).licenseQuantity <= 5;
+    const quantity = getProductQuantity(p);
+    return quantity > 0 && quantity <= 5;
   }).length;
   const outOfStockProducts = products.filter(p => {
-    if (p.type === 'hardware') {
-      return (p as HardwareProduct).stockQuantity === 0;
-    }
-    return (p as SoftwareProduct).licenseQuantity === 0;
+    return getProductQuantity(p) === 0;
   }).length;
 
   const pendingQuotations = quotations.filter(q => q.status === 'draft' || q.status === 'sent').length;

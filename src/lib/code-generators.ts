@@ -1,5 +1,5 @@
-export const generateProductCode = (type: 'hardware' | 'software', category: string): string => {
-  const prefix = type === 'hardware' ? 'HW' : 'SW';
+export const generateProductCode = (type: 'hardware' | 'software' | null, category: string): string => {
+  const prefix = type === 'hardware' ? 'HW' : type === 'software' ? 'SW' : 'PRD';
   const catCode = category.substring(0, 3).toUpperCase();
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   return `${prefix}-${catCode}-${random}`;

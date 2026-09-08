@@ -59,7 +59,7 @@ const ReportsPage = () => {
         day.totalProfit += calculateItemProfit(item);
         if (product?.type === 'hardware') {
           day.hardwareSales += item.lineTotal;
-        } else {
+        } else if (product?.type === 'software') {
           day.softwareSales += item.lineTotal;
         }
       });
@@ -200,12 +200,9 @@ const ReportsPage = () => {
     {
       key: 'type',
       header: 'Type',
-      cell: (row: typeof productReportData[0]) => (
-        <StatusBadge 
-          status={row.type} 
-          variant={row.type === 'hardware' ? 'info' : 'success'} 
-        />
-      ),
+      cell: (row: typeof productReportData[0]) => row.type ? (
+        <StatusBadge status={row.type} variant={row.type === 'hardware' ? 'info' : 'success'} />
+      ) : <span className="text-sm text-muted-foreground">Other</span>,
     },
     {
       key: 'totalSold',

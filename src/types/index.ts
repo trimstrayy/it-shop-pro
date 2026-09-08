@@ -42,7 +42,7 @@ export interface BaseProduct {
   attributes?: Record<string, string | number | boolean | null>;
   unitOfMeasure?: string;
   isCutToOrder?: boolean;
-  type: ProductType;
+  type: ProductType | null;
   costPrice: number;
   sellingPrice: number;
   taxPercent: number;
@@ -66,7 +66,19 @@ export interface SoftwareProduct extends BaseProduct {
   expiryDate?: Date;
 }
 
-export type Product = HardwareProduct | SoftwareProduct;
+/** A stock-tracked product outside the IT hardware/software catalog. */
+export interface GenericProduct extends BaseProduct {
+  type: null;
+  stockQuantity: number;
+}
+
+export type Product = HardwareProduct | SoftwareProduct | GenericProduct;
+
+export const getProductQuantity = (product: Product): number =>
+  'licenseQuantity' in product ? product.licenseQuantity : product.stockQuantity;
+
+export const getProductQuantityLabel = (product: Product): 'units' | 'licenses' =>
+  'licenseQuantity' in product ? 'licenses' : 'units';
 
 // Inventory Types
 export type StockStatus = 'in-stock' | 'low-stock' | 'out-of-stock';
@@ -244,7 +256,7 @@ export interface ProductReport {
   productId: string;
   productCode: string;
   productName: string;
-  type: ProductType;
+  type: ProductType | null;
   totalSold: number;
   totalRevenue: number;
   totalProfit: number;

@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
-import { Product, InvoiceItem, Invoice, PaymentMode } from '@/types';
+import { Product, InvoiceItem, Invoice, PaymentMode, getProductQuantity } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
@@ -196,9 +196,7 @@ const BillingPage = () => {
 
   // Show sale-ready products first, then active products with no stock, and
   // keep inactive products at the bottom for visibility without allowing sale.
-  const getStock = (product: Product): number => {
-    return Number((product as Product & { stockQuantity?: number }).stockQuantity ?? 0);
-  };
+  const getStock = (product: Product): number => getProductQuantity(product);
 
   const filteredProducts = products.filter(product => {
     const matchesFilter =
@@ -674,7 +672,7 @@ const BillingPage = () => {
                               <div className="text-right">
                                 <span className="font-bold text-primary">NPR {product.sellingPrice.toLocaleString()}</span>
                                 {product.status !== 'active' ? <span className="block text-xs text-muted-foreground">Inactive</span> : stock === 0 && <span className="block text-xs text-destructive">Out of stock</span>}
-                                <p className="text-xs text-muted-foreground">{product.type}</p>
+                                {product.type && <p className="text-xs text-muted-foreground">{product.type}</p>}
                               </div>
                             </button>
                           );

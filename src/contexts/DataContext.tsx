@@ -15,6 +15,7 @@ import {
   InvoiceItem,
   HardwareProduct,
   SoftwareProduct,
+  GenericProduct,
   Customer,
   LaborRate,
   RepairJob,
@@ -290,7 +291,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       }
 
       if (productsResult.data) {
-        setProducts(productsResult.data.map(product => product.type === 'hardware' ? ({
+        setProducts(productsResult.data.map(product => {
+          if (product.type === 'hardware') return ({
           id: product.id,
           productCode: product.product_code,
           barcode: product.barcode,
@@ -315,7 +317,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           warrantyPeriod: Number(product.warranty_period ?? 0),
           createdAt: new Date(product.created_at),
           updatedAt: new Date(product.updated_at),
-        } as HardwareProduct) : ({
+          } as HardwareProduct);
+          if (product.type === 'software') return ({
           id: product.id,
           productCode: product.product_code,
           barcode: product.barcode,
@@ -340,7 +343,28 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           expiryDate: product.expiry_date ? new Date(product.expiry_date) : undefined,
           createdAt: new Date(product.created_at),
           updatedAt: new Date(product.updated_at),
-        } as SoftwareProduct)));
+          } as SoftwareProduct);
+          return {
+            id: product.id,
+            productCode: product.product_code,
+            barcode: product.barcode,
+            name: product.name,
+            category: product.category,
+            categoryId: product.category_id || null,
+            attributes: product.attributes || {},
+            unitOfMeasure: product.unit_of_measure || 'unit',
+            isCutToOrder: Boolean(product.is_cut_to_order),
+            type: null,
+            costPrice: Number(product.cost_price ?? 0),
+            sellingPrice: Number(product.selling_price ?? 0),
+            taxPercent: Number(product.tax_percent ?? 0),
+            status: product.status,
+            description: product.description,
+            stockQuantity: Number(product.stock_quantity ?? 0),
+            createdAt: new Date(product.created_at),
+            updatedAt: new Date(product.updated_at),
+          } as GenericProduct;
+        }));
       }
 
       if (inventoryLogsResult.data) {
@@ -607,12 +631,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       attributes: newProduct.attributes || {},
       unit_of_measure: newProduct.unitOfMeasure || 'unit',
       is_cut_to_order: Boolean(newProduct.isCutToOrder),
-      stock_quantity: newProduct.type === 'hardware' ? newProduct.stockQuantity : 0,
-      supplier: newProduct.type === 'hardware' ? newProduct.supplier : null,
-      warranty_period: newProduct.type === 'hardware' ? newProduct.warrantyPeriod : null,
-      license_type: newProduct.type === 'software' ? newProduct.licenseType : null,
-      license_quantity: newProduct.type === 'software' ? newProduct.licenseQuantity : null,
-      expiry_date: newProduct.type === 'software' ? newProduct.expiryDate?.toISOString() || null : null,
+      stock_quantity: 'licenseQuantity' in newProduct ? 0 : newProduct.stockQuantity,
+      supplier: 'supplier' in newProduct ? newProduct.supplier : null,
+      warranty_period: 'warrantyPeriod' in newProduct ? newProduct.warrantyPeriod : null,
+      license_type: 'licenseQuantity' in newProduct ? newProduct.licenseType : null,
+      license_quantity: 'licenseQuantity' in newProduct ? newProduct.licenseQuantity : null,
+      expiry_date: 'licenseQuantity' in newProduct ? newProduct.expiryDate?.toISOString() || null : null,
     });
     if (insertError) toast({ title: 'Product save failed', description: insertError.message, variant: 'destructive' });
     return newProduct;
@@ -680,20 +704,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     const product = getProduct(productId);
     if (!product) return;
 
-    const currentQty = product.type === 'hardware'
-      ? (product as HardwareProduct).stockQuantity
-      : (product as SoftwareProduct).licenseQuantity;
+    const currentQty = 'licenseQuantity' in product ? product.licenseQuantity : product.stockQuantity;
     const newQty = currentQty + change;
 
     // Update product stock
-    const saved = product.type === 'hardware'
-      ? await updateProduct(productId, { stockQuantity: newQty })
-      : await updateProduct(productId, { licenseQuantity: newQty });
+    const saved = 'licenseQuantity' in product
+      ? await updateProduct(productId, { licenseQuantity: newQty })
+      : await updateProduct(productId, { stockQuantity: newQty });
     if (!saved) return false;
 
     // Low-stock & out-of-stock alerts on any reduction
     if (change < 0) {
-      const label = product.type === 'hardware' ? 'units' : 'licenses';
+      const label = product.type === 'software' ? 'licenses' : 'units';
       if (newQty <= 0) {
         toast({
           title: '⚠️ Out of Stock!',

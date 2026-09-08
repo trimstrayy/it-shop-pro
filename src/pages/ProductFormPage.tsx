@@ -116,7 +116,8 @@ const ProductFormPage = () => {
       attributes: formData.attributes,
       unitOfMeasure: formData.unitOfMeasure,
       isCutToOrder: formData.isCutToOrder,
-      type: existingProduct?.type || 'hardware',
+      // Category-driven products (such as furniture) are generic stock items.
+      type: existingProduct?.type ?? null,
       stockQuantity: Number(formData.stockQuantity),
       costPrice: Number(formData.costPrice),
       sellingPrice: Number(formData.sellingPrice),
