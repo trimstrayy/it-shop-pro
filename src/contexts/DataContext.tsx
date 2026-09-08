@@ -1,4 +1,6 @@
-﻿import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+﻿//datacontext.tsx
+
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { 
   Product, 
   Quotation, 
@@ -43,7 +45,7 @@ interface DataContextType {
   // Products
   products: Product[];
   addProduct: (product: Omit<Product, 'id' | 'productCode' | 'barcode' | 'createdAt' | 'updatedAt'>) => Promise<Product>;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   archiveProduct: (id: string) => void;
   deleteProduct: (id: string) => void;
   getProduct: (id: string) => Product | undefined;
@@ -52,25 +54,25 @@ interface DataContextType {
 
   // Inventory
   inventoryLogs: InventoryLog[];
-  updateInventory: (productId: string, change: number, reason: InventoryLog['reason'], userId: string, userName: string, notes?: string) => void;
+  updateInventory: (productId: string, change: number, reason: InventoryLog['reason'], userId: string, userName: string, notes?: string) => Promise<boolean>;
 
   // Repair jobs
-  addRepairJob: (repairJob: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>) => RepairJob;
-  updateRepairJob: (id: string, updates: Partial<RepairJob>) => void;
-  convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Invoice;
+  addRepairJob: (repairJob: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>) => Promise<RepairJob>;
+  updateRepairJob: (id: string, updates: Partial<RepairJob>) => Promise<boolean>;
+  convertRepairToInvoice: (repairJobId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Promise<Invoice>;
 
   // Quotations
   quotations: Quotation[];
-  addQuotation: (quotation: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>) => Quotation;
-  updateQuotation: (id: string, updates: Partial<Quotation>) => void;
-  convertToInvoice: (quotationId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Invoice;
+  addQuotation: (quotation: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>) => Promise<Quotation>;
+  updateQuotation: (id: string, updates: Partial<Quotation>) => Promise<boolean>;
+  convertToInvoice: (quotationId: string, paymentMode: Invoice['paymentMode'], amountPaid?: number) => Promise<Invoice>;
 
   // Invoices
   invoices: Invoice[];
   invoicePayments: InvoicePayment[];
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => Invoice;
-  updateInvoice: (id: string, updates: Partial<Invoice>) => void;
-  cancelInvoice: (id: string) => void;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => Promise<Invoice>;
+  updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<boolean>;
+  cancelInvoice: (id: string) => Promise<boolean>;
   recordInvoicePayment: (invoiceId: string, amount: number, recordedBy: string) => Promise<InvoicePayment | undefined>;
 
   // Data loading state
@@ -79,14 +81,14 @@ interface DataContextType {
 
   // Deliveries
   deliveries: Delivery[];
-  updateDeliveryStage: (id: string, stage: DeliveryStage, updatedBy: string, notes?: string, location?: string) => void;
-  assignDeliveryPerson: (id: string, deliveryPerson: DeliveryPerson) => void;
-  markDeliveryReturned: (id: string, updatedBy: string, notes?: string) => void;
+  updateDeliveryStage: (id: string, stage: DeliveryStage, updatedBy: string, notes?: string, location?: string) => Promise<boolean>;
+  assignDeliveryPerson: (id: string, deliveryPerson: DeliveryPerson) => Promise<boolean>;
+  markDeliveryReturned: (id: string, updatedBy: string, notes?: string) => Promise<boolean>;
   getDelivery: (id: string) => Delivery | undefined;
   deliveryPeople: DeliveryPerson[];
-  addDeliveryPerson: (deliveryPerson: Omit<DeliveryPerson, 'id'>) => DeliveryPerson;
-  assignDeliveryPeople: (ids: string[], deliveryPerson: DeliveryPerson) => void;
-  unassignDeliveryPerson: (id: string) => void;
+  addDeliveryPerson: (deliveryPerson: Omit<DeliveryPerson, 'id'>) => Promise<DeliveryPerson | undefined>;
+  assignDeliveryPeople: (ids: string[], deliveryPerson: DeliveryPerson) => Promise<boolean>;
+  unassignDeliveryPerson: (id: string) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -605,7 +607,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       attributes: newProduct.attributes || {},
       unit_of_measure: newProduct.unitOfMeasure || 'unit',
       is_cut_to_order: Boolean(newProduct.isCutToOrder),
-      stock_quantity: newProduct.stockQuantity ?? 0,
+      stock_quantity: newProduct.type === 'hardware' ? newProduct.stockQuantity : 0,
       supplier: newProduct.type === 'hardware' ? newProduct.supplier : null,
       warranty_period: newProduct.type === 'hardware' ? newProduct.warrantyPeriod : null,
       license_type: newProduct.type === 'software' ? newProduct.licenseType : null,
@@ -616,11 +618,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     return newProduct;
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    setProducts(prev => prev.map(p => 
+  const updateProduct = async (id: string, updates: Partial<Product>): Promise<boolean> => {
+    const previousProducts = products;
+    setProducts(prev => prev.map(p =>
       p.id === id ? { ...p, ...updates, updatedAt: new Date() } as Product : p
     ));
-    void supabase.from('products').update({
+    const { data, error } = await supabase.from('products').update({
       ...('category' in updates ? { category: updates.category } : {}),
       ...('categoryId' in updates ? { category_id: updates.categoryId } : {}),
       ...('attributes' in updates ? { attributes: updates.attributes } : {}),
@@ -633,16 +636,25 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       ...('description' in updates ? { description: updates.description } : {}),
       ...('status' in updates ? { status: updates.status } : {}),
       ...('stockQuantity' in updates ? { stock_quantity: updates.stockQuantity } : {}),
+      ...('licenseQuantity' in updates ? { license_quantity: updates.licenseQuantity } : {}),
       ...('supplier' in updates ? { supplier: updates.supplier } : {}),
       ...('warrantyPeriod' in updates ? { warranty_period: updates.warrantyPeriod } : {}),
-    }).eq('id', id).select().then(({ data, error }) => {
-      console.log('RESTOCK UPDATE RESULT:', { data, error });
-      if (error) toast({ title: 'Product update failed', description: error.message, variant: 'destructive' });
-    });
+    }).eq('id', id).select();
+    if (error) {
+      toast({ title: 'Product update failed', description: error.message, variant: 'destructive' });
+      setProducts(previousProducts);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: 'Product update failed', description: 'The update did not apply — this product may not belong to your account, or you may not have permission to change it.', variant: 'destructive' });
+      setProducts(previousProducts);
+      return false;
+    }
+    return true;
   };
 
-  const archiveProduct = (id: string) => {
-    updateProduct(id, { status: 'inactive' });
+  const archiveProduct = async (id: string) => {
+    await updateProduct(id, { status: 'inactive' });
   };
 
   const deleteProduct = (id: string) => {
@@ -657,14 +669,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const LOW_STOCK_THRESHOLD = 5;
 
   // Inventory functions
-  const updateInventory = (
+  const updateInventory = async (
     productId: string, 
     change: number, 
     reason: InventoryLog['reason'], 
     userId: string, 
     userName: string, 
     notes?: string
-  ) => {
+  ): Promise<boolean> => {
     const product = getProduct(productId);
     if (!product) return;
 
@@ -674,11 +686,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     const newQty = currentQty + change;
 
     // Update product stock
-    if (product.type === 'hardware') {
-      updateProduct(productId, { stockQuantity: newQty });
-    } else {
-      updateProduct(productId, { licenseQuantity: newQty });
-    }
+    const saved = product.type === 'hardware'
+      ? await updateProduct(productId, { stockQuantity: newQty })
+      : await updateProduct(productId, { licenseQuantity: newQty });
+    if (!saved) return false;
 
     // Low-stock & out-of-stock alerts on any reduction
     if (change < 0) {
@@ -700,7 +711,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
     // Add log entry
     const log: InventoryLog = {
-      id: `log-${Date.now()}`,
+      id: crypto.randomUUID(),
       productId,
       productCode: product.productCode,
       productName: product.name,
@@ -712,38 +723,100 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       notes,
     };
     setInventoryLogs(prev => [log, ...prev]);
+    const { data: logData, error: logError } = await supabase.from('inventory_logs').insert({
+      id: log.id,
+      tenant_id: user?.tenantId,
+      product_id: log.productId,
+      product_code: log.productCode,
+      product_name: log.productName,
+      change: log.change,
+      reason: log.reason,
+      user_id: log.userId || null,
+      user_name: log.userName,
+      timestamp: log.timestamp.toISOString(),
+      notes: log.notes || null,
+    }).select();
+    if (logError || !logData?.length) {
+      setInventoryLogs(prev => prev.filter(item => item.id !== log.id));
+      toast({ title: 'Inventory log save failed', description: logError?.message || 'The inventory change was not logged.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
   // Repair job functions
-  const addRepairJob = (repairJobData: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>): RepairJob => {
+  const addRepairJob = async (repairJobData: Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>): Promise<RepairJob> => {
     const now = new Date();
     const newRepairJob: RepairJob = {
       ...repairJobData,
-      id: `repair-${Date.now()}`,
+      id: crypto.randomUUID(),
       jobId: `RJ-${String(Date.now()).slice(-6)}`,
-      qrToken: `qr-${Date.now()}`,
+      qrToken: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
       status: repairJobData.status || 'to_do',
     };
 
     setRepairJobs(prev => [newRepairJob, ...prev]);
+    const { data, error } = await supabase.from('repair_jobs').insert({
+      id: newRepairJob.id,
+      tenant_id: user?.tenantId,
+      job_id: newRepairJob.jobId,
+      customer_id: newRepairJob.customerId || null,
+      device_id: newRepairJob.deviceId || null,
+      assigned_tech_id: newRepairJob.assignedTechId || null,
+      status: newRepairJob.status,
+      priority: newRepairJob.priority,
+      estimated_cost: newRepairJob.estimatedCost,
+      deposit_paid: newRepairJob.depositPaid,
+      issue_summary: newRepairJob.issueSummary || null,
+      intake_notes: newRepairJob.intakeNotes || null,
+      public_update: newRepairJob.publicUpdate || null,
+      qr_token: newRepairJob.qrToken,
+      ready_notified_at: newRepairJob.readyNotifiedAt?.toISOString() || null,
+      completed_at: newRepairJob.completedAt?.toISOString() || null,
+    }).select();
+    if (error || !data?.length) {
+      setRepairJobs(prev => prev.filter(job => job.id !== newRepairJob.id));
+      toast({ title: 'Repair job save failed', description: error?.message || 'The repair job was not saved.', variant: 'destructive' });
+      throw new Error(error?.message || 'The repair job was not saved.');
+    }
     return newRepairJob;
   };
 
-  const updateRepairJob = (id: string, updates: Partial<RepairJob>) => {
+  const updateRepairJob = async (id: string, updates: Partial<RepairJob>): Promise<boolean> => {
+    const previousRepairJobs = repairJobs;
     setRepairJobs(prev => prev.map(job =>
       job.id === id ? { ...job, ...updates, updatedAt: new Date() } : job
     ));
+    const { data, error } = await supabase.from('repair_jobs').update({
+      ...('customerId' in updates ? { customer_id: updates.customerId } : {}),
+      ...('deviceId' in updates ? { device_id: updates.deviceId } : {}),
+      ...('assignedTechId' in updates ? { assigned_tech_id: updates.assignedTechId } : {}),
+      ...('status' in updates ? { status: updates.status } : {}),
+      ...('priority' in updates ? { priority: updates.priority } : {}),
+      ...('estimatedCost' in updates ? { estimated_cost: updates.estimatedCost } : {}),
+      ...('depositPaid' in updates ? { deposit_paid: updates.depositPaid } : {}),
+      ...('issueSummary' in updates ? { issue_summary: updates.issueSummary } : {}),
+      ...('intakeNotes' in updates ? { intake_notes: updates.intakeNotes } : {}),
+      ...('publicUpdate' in updates ? { public_update: updates.publicUpdate } : {}),
+      ...('completedAt' in updates ? { completed_at: updates.completedAt?.toISOString() || null } : {}),
+    }).eq('id', id).select();
+    if (error || !data?.length) {
+      setRepairJobs(previousRepairJobs);
+      toast({ title: 'Repair job update failed', description: error?.message || 'The update did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const convertRepairToInvoice = (repairJobId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Invoice => {
+  const convertRepairToInvoice = async (repairJobId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Promise<Invoice> => {
     const repairJob = repairJobs.find(job => job.id === repairJobId);
     if (!repairJob) throw new Error('Repair job not found');
 
     const invoiceItems: InvoiceItem[] = [
       {
-        id: `repair-item-${repairJob.id}`,
+        id: crypto.randomUUID(),
         productId: `repair-service-${repairJob.id}`,
         productCode: 'REPAIR-SVC',
         productName: repairJob.issueSummary || 'Device Repair Service',
@@ -755,7 +828,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         lineTotal: repairJob.estimatedCost,
       },
       ...((repairJob.parts || []).map((part) => ({
-        id: `repair-part-${part.id}`,
+        id: crypto.randomUUID(),
         productId: part.productId,
         productCode: `PART-${part.productId.slice(-4)}`,
         productName: `Repair Part: ${part.productId}`,
@@ -770,7 +843,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
     const grandTotalValue = invoiceItems.reduce((sum, item) => sum + item.lineTotal, 0);
     const resolvedAmountPaid = paymentMode === 'credit' ? Math.min(Math.max(requestedAmountPaid, 0), grandTotalValue) : grandTotalValue;
-    const invoice = addInvoice({
+    const invoice = await addInvoice({
       customerId: repairJob.customerId || null,
       clientName: repairJob.customer?.name || 'Repair Customer',
       clientEmail: repairJob.customer?.email || 'repair@example.com',
@@ -789,32 +862,97 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       paidAt: paymentMode === 'credit' ? undefined : new Date(),
     });
 
-    updateRepairJob(repairJobId, { status: 'delivered', completedAt: new Date() });
+    if (!await updateRepairJob(repairJobId, { status: 'delivered', completedAt: new Date() })) {
+      throw new Error('The repair job status could not be saved.');
+    }
     return invoice;
   };
 
   // Quotation functions
-  const addQuotation = (quotationData: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>): Quotation => {
+  const addQuotation = async (quotationData: Omit<Quotation, 'id' | 'quotationNumber' | 'createdAt' | 'updatedAt'>): Promise<Quotation> => {
     const now = new Date();
     const newQuotation: Quotation = {
       ...quotationData,
-      id: `qt-${Date.now()}`,
+      id: crypto.randomUUID(),
       quotationNumber: generateQuotationNumber(),
       createdAt: now,
       updatedAt: now,
     };
     
     setQuotations(prev => [...prev, newQuotation]);
+    const { data, error } = await supabase.from('quotations').insert({
+      id: newQuotation.id,
+      tenant_id: user?.tenantId,
+      quotation_number: newQuotation.quotationNumber,
+      customer_id: newQuotation.customerId || null,
+      client_name: newQuotation.clientName,
+      client_email: newQuotation.clientEmail,
+      client_phone: newQuotation.clientPhone,
+      client_address: newQuotation.clientAddress,
+      subtotal: newQuotation.subtotal,
+      total_discount: newQuotation.totalDiscount,
+      total_tax: newQuotation.totalTax,
+      grand_total: newQuotation.grandTotal,
+      status: newQuotation.status,
+      valid_until: newQuotation.validUntil.toISOString().slice(0, 10),
+      notes: newQuotation.notes || null,
+      created_by: newQuotation.createdBy || null,
+    }).select();
+    if (error || !data?.length) {
+      setQuotations(prev => prev.filter(quotation => quotation.id !== newQuotation.id));
+      toast({ title: 'Quotation save failed', description: error?.message || 'The quotation was not saved.', variant: 'destructive' });
+      throw new Error(error?.message || 'The quotation was not saved.');
+    }
+    const { data: itemData, error: itemError } = await supabase.from('quotation_items').insert(newQuotation.items.map(item => ({
+      id: item.id,
+      tenant_id: user?.tenantId,
+      quotation_id: newQuotation.id,
+      product_id: item.productId,
+      product_code: item.productCode,
+      product_name: item.productName,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      tax_percent: item.taxPercent,
+      discount: item.discount,
+      line_total: item.lineTotal,
+    }))).select();
+    if (itemError || !itemData?.length || itemData.length !== newQuotation.items.length) {
+      await supabase.from('quotations').delete().eq('id', newQuotation.id);
+      setQuotations(prev => prev.filter(quotation => quotation.id !== newQuotation.id));
+      toast({ title: 'Quotation items save failed', description: itemError?.message || 'The quotation items were not saved.', variant: 'destructive' });
+      throw new Error(itemError?.message || 'The quotation items were not saved.');
+    }
     return newQuotation;
   };
 
-  const updateQuotation = (id: string, updates: Partial<Quotation>) => {
+  const updateQuotation = async (id: string, updates: Partial<Quotation>): Promise<boolean> => {
+    const previousQuotations = quotations;
     setQuotations(prev => prev.map(q => 
       q.id === id ? { ...q, ...updates, updatedAt: new Date() } : q
     ));
+    const { data, error } = await supabase.from('quotations').update({
+      ...('customerId' in updates ? { customer_id: updates.customerId } : {}),
+      ...('clientName' in updates ? { client_name: updates.clientName } : {}),
+      ...('clientEmail' in updates ? { client_email: updates.clientEmail } : {}),
+      ...('clientPhone' in updates ? { client_phone: updates.clientPhone } : {}),
+      ...('clientAddress' in updates ? { client_address: updates.clientAddress } : {}),
+      ...('subtotal' in updates ? { subtotal: updates.subtotal } : {}),
+      ...('totalDiscount' in updates ? { total_discount: updates.totalDiscount } : {}),
+      ...('totalTax' in updates ? { total_tax: updates.totalTax } : {}),
+      ...('grandTotal' in updates ? { grand_total: updates.grandTotal } : {}),
+      ...('status' in updates ? { status: updates.status } : {}),
+      ...('validUntil' in updates ? { valid_until: updates.validUntil?.toISOString().slice(0, 10) } : {}),
+      ...('notes' in updates ? { notes: updates.notes } : {}),
+    }).eq('id', id).select();
+    if (error || !data?.length) {
+      setQuotations(previousQuotations);
+      toast({ title: 'Quotation update failed', description: error?.message || 'The update did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const convertToInvoice = (quotationId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Invoice => {
+  const convertToInvoice = async (quotationId: string, paymentMode: Invoice['paymentMode'], requestedAmountPaid = 0): Promise<Invoice> => {
     const quotation = quotations.find(q => q.id === quotationId);
     if (!quotation) throw new Error('Quotation not found');
 
@@ -828,7 +966,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
     const amountPaid = paymentMode === 'credit' ? Math.min(Math.max(requestedAmountPaid, 0), quotation.grandTotal) : quotation.grandTotal;
     const newInvoice: Invoice = {
-      id: `inv-${Date.now()}`,
+      id: crypto.randomUUID(),
       invoiceNumber: generateInvoiceNumber(),
       quotationId,
       customerId: quotation.customerId || null,
@@ -850,23 +988,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       paidAt: paymentMode === 'credit' ? undefined : new Date(),
     };
 
-    setInvoices(prev => [...prev, newInvoice]);
-    setDeliveries(prev => [...prev, ...buildDeliveriesForInvoice(newInvoice)]);
-    updateQuotation(quotationId, { status: 'converted' });
+    const invoice = await addInvoice(newInvoice);
+    if (!await updateQuotation(quotationId, { status: 'converted' })) throw new Error('The quotation status could not be saved.');
 
     // Reduce inventory for each item in the quotation
-    quotation.items.forEach(item => {
-      updateInventory(
-        item.productId,
-        -item.quantity,
-        'sale',
-        quotation.createdBy,
-        'System',
-        `Invoice ${newInvoice.invoiceNumber} (from quotation ${quotation.quotationNumber})`
-      );
-    });
-
-    return newInvoice;
+    return invoice;
   };
 
   // Builds one delivery record per invoice line item. Used by both addInvoice and
@@ -874,14 +1000,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   // repair conversion) automatically creates delivery records — independent of
   // whether the customer later chooses "Print Receipt" or "Skip".
   //
-  // NOTE: the app's write layer is currently local React state (Supabase is used
-  // for reads on load + auth). These records are committed together with the
-  // invoice; once persistence is wired up this should become part of the same DB
-  // transaction as the invoice insert.
   const buildDeliveriesForInvoice = (invoice: Invoice): Delivery[] => {
     const now = new Date();
     return invoice.items.map((item, index) => ({
-      id: `del-${now.getTime()}-${index}-${item.id}`,
+      id: crypto.randomUUID(),
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       productCode: item.productCode,
@@ -895,7 +1017,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       createdAt: now,
       trackingHistory: [
         {
-          id: `th-${now.getTime()}-${index}`,
+          id: crypto.randomUUID(),
           stage: 'in_inventory',
           timestamp: now,
           updatedBy: 'System',
@@ -916,7 +1038,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   };
 
   // Invoice functions
-  const addInvoice = (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Invoice => {
+  const addInvoice = async (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>): Promise<Invoice> => {
     const paymentMode = invoiceData.paymentMode ?? 'cash';
     const paidAmount = paymentMode === 'credit'
       ? Number(invoiceData.amountPaid ?? 0)
@@ -930,7 +1052,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       amountDue: dueAmount,
       paymentStatus: resolvedStatus === 'paid' ? 'paid' : 'pending',
       status: resolvedStatus,
-      id: `inv-${Date.now()}`,
+      id: crypto.randomUUID(),
       invoiceNumber: generateInvoiceNumber(),
       createdAt: new Date(),
       paidAt: resolvedStatus === 'paid' ? new Date() : undefined,
@@ -941,8 +1063,99 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     setInvoices(prev => [...prev, newInvoice]);
     setDeliveries(prev => [...prev, ...newDeliveries]);
 
-    invoiceData.items.forEach(item => {
-      updateInventory(
+    const { data, error } = await supabase.from('invoices').insert({
+      id: newInvoice.id,
+      tenant_id: user?.tenantId,
+      invoice_number: newInvoice.invoiceNumber,
+      quotation_id: newInvoice.quotationId || null,
+      customer_id: newInvoice.customerId || null,
+      client_name: newInvoice.clientName,
+      client_email: newInvoice.clientEmail,
+      client_phone: newInvoice.clientPhone,
+      client_address: newInvoice.clientAddress,
+      subtotal: newInvoice.subtotal,
+      total_discount: newInvoice.totalDiscount,
+      total_tax: newInvoice.totalTax,
+      grand_total: newInvoice.grandTotal,
+      amount_paid: newInvoice.amountPaid,
+      amount_due: newInvoice.amountDue,
+      payment_mode: newInvoice.paymentMode,
+      status: newInvoice.status,
+      created_by: newInvoice.createdBy || null,
+      paid_at: newInvoice.paidAt?.toISOString() || null,
+    }).select();
+    if (error || !data?.length) {
+      setInvoices(prev => prev.filter(invoice => invoice.id !== newInvoice.id));
+      setDeliveries(prev => prev.filter(delivery => delivery.invoiceId !== newInvoice.id));
+      toast({ title: 'Invoice save failed', description: error?.message || 'The invoice was not saved.', variant: 'destructive' });
+      throw new Error(error?.message || 'The invoice was not saved.');
+    }
+    const { data: itemData, error: itemError } = await supabase.from('invoice_items').insert(newInvoice.items.map(item => ({
+      id: item.id,
+      tenant_id: user?.tenantId,
+      invoice_id: newInvoice.id,
+      product_id: item.productId.startsWith('repair-service-') ? null : item.productId,
+      product_code: item.productCode,
+      product_name: item.productName,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      cost_price: item.costPrice,
+      tax_percent: item.taxPercent,
+      discount: item.discount,
+      line_total: item.lineTotal,
+    }))).select();
+    if (itemError || !itemData?.length || itemData.length !== newInvoice.items.length) {
+      await supabase.from('invoices').delete().eq('id', newInvoice.id);
+      setInvoices(prev => prev.filter(invoice => invoice.id !== newInvoice.id));
+      setDeliveries(prev => prev.filter(delivery => delivery.invoiceId !== newInvoice.id));
+      toast({ title: 'Invoice items save failed', description: itemError?.message || 'The invoice items were not saved.', variant: 'destructive' });
+      throw new Error(itemError?.message || 'The invoice items were not saved.');
+    }
+
+    const deliveryRows = newDeliveries.map(delivery => ({
+      id: delivery.id,
+      tenant_id: user?.tenantId,
+      invoice_id: delivery.invoiceId,
+      invoice_number: delivery.invoiceNumber,
+      product_code: delivery.productCode,
+      product_name: delivery.productName,
+      quantity: delivery.quantity,
+      current_stage: delivery.currentStage,
+      status: delivery.status,
+      recipient_name: delivery.recipientName,
+      recipient_phone: delivery.recipientPhone,
+      delivery_address: delivery.deliveryAddress,
+      notes: delivery.notes || null,
+    }));
+    const { data: deliveryData, error: deliveryError } = await supabase.from('deliveries').insert(deliveryRows).select();
+    if (deliveryError || !deliveryData?.length || deliveryData.length !== deliveryRows.length) {
+      await supabase.from('invoices').delete().eq('id', newInvoice.id);
+      setInvoices(prev => prev.filter(invoice => invoice.id !== newInvoice.id));
+      setDeliveries(prev => prev.filter(delivery => delivery.invoiceId !== newInvoice.id));
+      toast({ title: 'Delivery records save failed', description: deliveryError?.message || 'The delivery records were not saved.', variant: 'destructive' });
+      throw new Error(deliveryError?.message || 'The delivery records were not saved.');
+    }
+    const initialEvents = newDeliveries.map(delivery => ({
+      id: delivery.trackingHistory[0].id,
+      tenant_id: user?.tenantId,
+      delivery_id: delivery.id,
+      stage: delivery.trackingHistory[0].stage,
+      timestamp: delivery.trackingHistory[0].timestamp.toISOString(),
+      notes: delivery.trackingHistory[0].notes || null,
+      updated_by: user?.id || null,
+    }));
+    const { data: initialEventData, error: initialEventError } = await supabase.from('delivery_tracking_events').insert(initialEvents).select();
+    if (initialEventError || !initialEventData?.length || initialEventData.length !== initialEvents.length) {
+      await supabase.from('invoices').delete().eq('id', newInvoice.id);
+      setInvoices(prev => prev.filter(invoice => invoice.id !== newInvoice.id));
+      setDeliveries(prev => prev.filter(delivery => delivery.invoiceId !== newInvoice.id));
+      toast({ title: 'Delivery history save failed', description: initialEventError?.message || 'The initial tracking events were not saved.', variant: 'destructive' });
+      throw new Error(initialEventError?.message || 'The initial tracking events were not saved.');
+    }
+
+    for (const item of invoiceData.items) {
+      if (!getProduct(item.productId)) continue;
+      const saved = await updateInventory(
         item.productId,
         -item.quantity,
         'sale',
@@ -950,23 +1163,54 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         'System',
         `Invoice ${newInvoice.invoiceNumber}`
       );
-    });
+      if (!saved) {
+        await supabase.from('invoices').delete().eq('id', newInvoice.id);
+        setInvoices(prev => prev.filter(invoice => invoice.id !== newInvoice.id));
+        setDeliveries(prev => prev.filter(delivery => delivery.invoiceId !== newInvoice.id));
+        toast({ title: 'Invoice inventory update failed', description: 'The invoice was rolled back because stock could not be updated.', variant: 'destructive' });
+        throw new Error('Invoice inventory update failed.');
+      }
+    }
 
     return newInvoice;
   };
 
-  const updateInvoice = (id: string, updates: Partial<Invoice>) => {
+  const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<boolean> => {
+    const previousInvoices = invoices;
     setInvoices(prev => prev.map(i => 
       i.id === id ? { ...i, ...updates } : i
     ));
+    const { data, error } = await supabase.from('invoices').update({
+      ...('quotationId' in updates ? { quotation_id: updates.quotationId } : {}),
+      ...('customerId' in updates ? { customer_id: updates.customerId } : {}),
+      ...('clientName' in updates ? { client_name: updates.clientName } : {}),
+      ...('clientEmail' in updates ? { client_email: updates.clientEmail } : {}),
+      ...('clientPhone' in updates ? { client_phone: updates.clientPhone } : {}),
+      ...('clientAddress' in updates ? { client_address: updates.clientAddress } : {}),
+      ...('subtotal' in updates ? { subtotal: updates.subtotal } : {}),
+      ...('totalDiscount' in updates ? { total_discount: updates.totalDiscount } : {}),
+      ...('totalTax' in updates ? { total_tax: updates.totalTax } : {}),
+      ...('grandTotal' in updates ? { grand_total: updates.grandTotal } : {}),
+      ...('amountPaid' in updates ? { amount_paid: updates.amountPaid } : {}),
+      ...('amountDue' in updates ? { amount_due: updates.amountDue } : {}),
+      ...('paymentMode' in updates ? { payment_mode: updates.paymentMode } : {}),
+      ...('status' in updates ? { status: updates.status } : {}),
+      ...('paidAt' in updates ? { paid_at: updates.paidAt?.toISOString() || null } : {}),
+    }).eq('id', id).select();
+    if (error || !data?.length) {
+      setInvoices(previousInvoices);
+      toast({ title: 'Invoice update failed', description: error?.message || 'The update did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const cancelInvoice = (id: string) => {
+  const cancelInvoice = async (id: string): Promise<boolean> => {
     const invoice = invoices.find(i => i.id === id);
-    if (!invoice) return;
+    if (!invoice) return false;
 
-    invoice.items.forEach(item => {
-      updateInventory(
+    for (const item of invoice.items) {
+      await updateInventory(
         item.productId,
         item.quantity,
         'return',
@@ -974,9 +1218,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         'System',
         `Invoice ${invoice.invoiceNumber} cancelled`
       );
-    });
+    }
 
-    updateInvoice(id, { status: 'cancelled', amountPaid: 0, amountDue: invoice.grandTotal });
+    return updateInvoice(id, { status: 'cancelled', amountPaid: 0, amountDue: invoice.grandTotal });
   };
 
   const recordInvoicePayment = async (invoiceId: string, amount: number, recordedBy: string): Promise<InvoicePayment | undefined> => {
@@ -1011,7 +1255,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     };
 
     setInvoicePayments(prev => [payment, ...prev]);
-    updateInvoice(invoiceId, {
+    await updateInvoice(invoiceId, {
       amountPaid: nextAmountPaid,
       amountDue: nextAmountDue,
       status: nextStatus,
@@ -1031,16 +1275,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     return 'in_progress';
   };
 
-  const updateDeliveryStage = (
+  const updateDeliveryStage = async (
     id: string, 
     stage: DeliveryStage, 
     updatedBy: string, 
     notes?: string, 
     location?: string
-  ) => {
+  ): Promise<boolean> => {
     const now = new Date();
     const newTrackingEvent: DeliveryTrackingEvent = {
-      id: `th-${Date.now()}`,
+      id: crypto.randomUUID(),
       stage,
       timestamp: now,
       updatedBy,
@@ -1048,6 +1292,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       location,
     };
 
+    const delivery = deliveries.find(item => item.id === id);
+    if (!delivery) return false;
+    const previousDeliveries = deliveries;
     setDeliveries(prev => prev.map(d => {
       if (d.id !== id) return d;
       
@@ -1064,37 +1311,96 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
       return { ...d, ...updates };
     }));
+    const newStatus = getDeliveryStatusFromStage(stage);
+    const { data: eventData, error: eventError } = await supabase.from('delivery_tracking_events').insert({
+      id: newTrackingEvent.id,
+      tenant_id: user?.tenantId,
+      delivery_id: id,
+      stage,
+      notes: notes || null,
+      updated_by: user?.id || null,
+      location: location || null,
+    }).select();
+    const { data: deliveryData, error: deliveryError } = eventError || !eventData?.length
+      ? { data: null, error: eventError }
+      : await supabase.from('deliveries').update({
+        current_stage: stage,
+        status: newStatus,
+        actual_delivery_date: stage === 'collected_by_receiver' ? now.toISOString() : undefined,
+      }).eq('id', id).select();
+    if (eventError || deliveryError || !eventData?.length || !deliveryData?.length) {
+      setDeliveries(previousDeliveries);
+      toast({ title: 'Delivery update failed', description: eventError?.message || deliveryError?.message || 'The update did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const assignDeliveryPerson = (id: string, deliveryPerson: DeliveryPerson) => {
+  const assignDeliveryPerson = async (id: string, deliveryPerson: DeliveryPerson): Promise<boolean> => {
+    const previousDeliveries = deliveries;
     setDeliveries(prev => prev.map(d => 
       d.id === id ? { ...d, deliveryPerson } : d
     ));
+    const { data, error } = await supabase.from('deliveries').update({ delivery_person_id: deliveryPerson.id }).eq('id', id).select();
+    if (error || !data?.length) {
+      setDeliveries(previousDeliveries);
+      toast({ title: 'Delivery assignment failed', description: error?.message || 'The assignment did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const addDeliveryPerson = (deliveryPersonData: Omit<DeliveryPerson, 'id'>): DeliveryPerson => {
+  const addDeliveryPerson = async (deliveryPersonData: Omit<DeliveryPerson, 'id'>): Promise<DeliveryPerson | undefined> => {
     const newDeliveryPerson: DeliveryPerson = {
       ...deliveryPersonData,
-      id: `dp-${Date.now()}`,
+      id: crypto.randomUUID(),
     };
     setDeliveryPeople(prev => [...prev, newDeliveryPerson]);
+    const { data, error } = await supabase.from('delivery_people').insert({
+      id: newDeliveryPerson.id,
+      tenant_id: user?.tenantId,
+      name: newDeliveryPerson.name,
+      phone: newDeliveryPerson.phone,
+      vehicle_number: newDeliveryPerson.vehicleNumber || null,
+    }).select();
+    if (error || !data?.length) {
+      setDeliveryPeople(prev => prev.filter(person => person.id !== newDeliveryPerson.id));
+      toast({ title: 'Delivery person save failed', description: error?.message || 'The delivery person was not saved.', variant: 'destructive' });
+      return undefined;
+    }
     return newDeliveryPerson;
   };
 
-  const assignDeliveryPeople = (ids: string[], deliveryPerson: DeliveryPerson) => {
+  const assignDeliveryPeople = async (ids: string[], deliveryPerson: DeliveryPerson): Promise<boolean> => {
+    const previousDeliveries = deliveries;
     setDeliveries(prev => prev.map(d => 
       ids.includes(d.id) ? { ...d, deliveryPerson } : d
     ));
+    const { data, error } = await supabase.from('deliveries').update({ delivery_person_id: deliveryPerson.id }).in('id', ids).select();
+    if (error || !data || data.length !== ids.length) {
+      setDeliveries(previousDeliveries);
+      toast({ title: 'Delivery assignment failed', description: error?.message || 'One or more assignments did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const unassignDeliveryPerson = (id: string) => {
+  const unassignDeliveryPerson = async (id: string): Promise<boolean> => {
+    const previousDeliveries = deliveries;
     setDeliveries(prev => prev.map(d => 
       d.id === id ? { ...d, deliveryPerson: undefined } : d
     ));
+    const { data, error } = await supabase.from('deliveries').update({ delivery_person_id: null }).eq('id', id).select();
+    if (error || !data?.length) {
+      setDeliveries(previousDeliveries);
+      toast({ title: 'Delivery unassignment failed', description: error?.message || 'The unassignment did not apply.', variant: 'destructive' });
+      return false;
+    }
+    return true;
   };
 
-  const markDeliveryReturned = (id: string, updatedBy: string, notes?: string) => {
-    updateDeliveryStage(id, 'returned', updatedBy, notes || 'Item returned to inventory');
+  const markDeliveryReturned = async (id: string, updatedBy: string, notes?: string): Promise<boolean> => {
+    return updateDeliveryStage(id, 'returned', updatedBy, notes || 'Item returned to inventory');
   };
 
   return (

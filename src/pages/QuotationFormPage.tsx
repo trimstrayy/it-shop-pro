@@ -63,7 +63,7 @@ const QuotationFormPage = () => {
       ));
     } else {
       const newItem: QuotationItem = {
-        id: `qti-${Date.now()}`,
+        id: crypto.randomUUID(),
         productId: product.id,
         productCode: product.productCode,
         productName: product.name,
@@ -123,7 +123,7 @@ const QuotationFormPage = () => {
 
   const validUntilDate = new Date();
   validUntilDate.setDate(validUntilDate.getDate() + validDays);
-  const renderedNotes = notes.replaceAll('{validity_days}', String(validDays));
+  const renderedNotes = notes.split('{validity_days}').join(String(validDays));
 
   const buildPrintableQuotation = () => {
     const quoteNumber = nextQuotationNumber;
@@ -490,7 +490,7 @@ const QuotationFormPage = () => {
     printWindow.close();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!clientInfo.name || !clientInfo.email || items.length === 0) {
@@ -502,7 +502,7 @@ const QuotationFormPage = () => {
       return;
     }
 
-    const quotation = addQuotation({
+    const quotation = await addQuotation({
       clientName: clientInfo.name,
       clientEmail: clientInfo.email,
       clientPhone: clientInfo.phone,

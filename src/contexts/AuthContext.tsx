@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole, UpdateProfileResult } from '@/types';
+import { EnabledModules, User, UserRole, UpdateProfileResult } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
@@ -52,8 +52,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     const { data: tenant } = data.tenant_id
-      ? await supabase.from('tenants').select('business_type').eq('id', data.tenant_id).maybeSingle()
+      ? await supabase.from('tenants').select('business_type, enabled_modules').eq('id', data.tenant_id).maybeSingle()
       : { data: null };
+
+    const enabledModules: EnabledModules = {
+      repair_lab: tenant?.enabled_modules?.repair_lab !== false,
+      deliveries: tenant?.enabled_modules?.deliveries !== false,
+      quotations: tenant?.enabled_modules?.quotations !== false,
+      parties: tenant?.enabled_modules?.parties !== false,
+      credit_management: tenant?.enabled_modules?.credit_management !== false,
+    };
 
     const mappedUser: User = {
       id: data.id,
@@ -62,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       role: data.role,
       tenantId: data.tenant_id ?? null,
       accountType: tenant?.business_type ?? null,
+      enabledModules,
       isPlatformAdmin: Boolean(data.is_platform_admin),
       avatar: data.avatar_url || undefined,
       createdAt: new Date(data.created_at),

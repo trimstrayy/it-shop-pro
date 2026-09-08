@@ -126,7 +126,8 @@ const ProductFormPage = () => {
     };
 
     if (isEditing) {
-      updateProduct(id!, baseProduct);
+      const saved = await updateProduct(id!, baseProduct);
+      if (!saved) return;
       await saveBatches(id!);
     } else {
       const savedProduct = await addProduct(baseProduct as any);

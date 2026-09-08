@@ -134,14 +134,15 @@ const DeliveriesPage = () => {
   const completedCount = deliveries.filter(d => d.status === 'completed').length;
   const returnedCount = deliveries.filter(d => d.status === 'returned').length;
 
-  const handleStageUpdate = (delivery: Delivery, newStage: DeliveryStage) => {
-    updateDeliveryStage(
+  const handleStageUpdate = async (delivery: Delivery, newStage: DeliveryStage) => {
+    const saved = await updateDeliveryStage(
       delivery.id, 
       newStage, 
       user?.name || 'Unknown',
       updateNotes || undefined,
       updateLocation || undefined
     );
+    if (!saved) return;
     toast({
       title: 'Stage Updated',
       description: `Delivery for ${delivery.productName} moved to "${DELIVERY_STAGES.find(s => s.stage === newStage)?.label || newStage}".`,
@@ -152,8 +153,9 @@ const DeliveriesPage = () => {
     setUpdateLocation('');
   };
 
-  const handleReturn = (delivery: Delivery) => {
-    markDeliveryReturned(delivery.id, user?.name || 'Unknown', updateNotes || 'Item returned');
+  const handleReturn = async (delivery: Delivery) => {
+    const saved = await markDeliveryReturned(delivery.id, user?.name || 'Unknown', updateNotes || 'Item returned');
+    if (!saved) return;
     toast({
       title: 'Marked as Returned',
       description: `Delivery for ${delivery.productName} has been marked as returned.`,
@@ -172,7 +174,7 @@ const DeliveriesPage = () => {
     setSelectedDelivery(null);
   };
 
-  const handleAssignDeliveryPerson = () => {
+  const handleAssignDeliveryPerson = async () => {
     if (!selectedDelivery) return;
 
     let person: DeliveryPerson | undefined;
@@ -186,7 +188,7 @@ const DeliveriesPage = () => {
         });
         return;
       }
-      person = addDeliveryPerson({
+      person = await addDeliveryPerson({
         name: deliveryPersonForm.name,
         phone: deliveryPersonForm.phone,
         vehicleNumber: deliveryPersonForm.vehicleNumber || undefined,
@@ -205,7 +207,8 @@ const DeliveriesPage = () => {
 
     setIsSaving(true);
     try {
-      assignDeliveryPerson(selectedDelivery.id, person);
+      const saved = await assignDeliveryPerson(selectedDelivery.id, person);
+      if (!saved) return;
       toast({
         title: 'Delivery Person Assigned',
         description: `${person.name} has been assigned to this delivery.`,
@@ -224,10 +227,10 @@ const DeliveriesPage = () => {
   };
 
   // Row-level driver assignment from the table dropdown
-  const handleRowDriverAssign = (delivery: Delivery, driverId: string) => {
+  const handleRowDriverAssign = async (delivery: Delivery, driverId: string) => {
     if (driverId === 'unassigned') {
       if (delivery.deliveryPerson) {
-        unassignDeliveryPerson(delivery.id);
+        await unassignDeliveryPerson(delivery.id);
         toast({
           title: 'Driver Unassigned',
           description: `Driver removed from ${delivery.invoiceNumber}.`,
@@ -239,7 +242,8 @@ const DeliveriesPage = () => {
     const person = deliveryPeople.find(p => p.id === driverId);
     if (!person) return;
 
-    assignDeliveryPerson(delivery.id, person);
+    const saved = await assignDeliveryPerson(delivery.id, person);
+    if (!saved) return;
     toast({
       title: 'Delivery Person Assigned',
       description: `${person.name} has been assigned to ${delivery.invoiceNumber}.`,
@@ -262,14 +266,15 @@ const DeliveriesPage = () => {
   };
 
   // Bulk driver assignment
-  const handleBulkAssignDriver = (driverId: string) => {
+  const handleBulkAssignDriver = async (driverId: string) => {
     if (selectedDeliveryIds.length === 0) return;
     const person = deliveryPeople.find(p => p.id === driverId);
     if (!person) return;
 
     setIsSaving(true);
     try {
-      assignDeliveryPeople(selectedDeliveryIds, person);
+      const saved = await assignDeliveryPeople(selectedDeliveryIds, person);
+      if (!saved) return;
       toast({
         title: 'Drivers Assigned',
         description: `Assigned ${person.name} to ${selectedDeliveryIds.length} delivery record(s).`,
@@ -290,24 +295,23 @@ const DeliveriesPage = () => {
 
   // Bulk stage update — only advances each selected delivery to its exact next
   // stage (same ordering guard as the single-row Update dialog), never a jump.
-  const handleBulkAdvanceStage = () => {
+  const handleBulkAdvanceStage = async () => {
     if (selectedDeliveryIds.length === 0) return;
 
     setIsSaving(true);
     try {
       let advanced = 0;
       const skipped: string[] = [];
-      selectedDeliveryIds.forEach(id => {
+      for (const id of selectedDeliveryIds) {
         const delivery = deliveries.find(d => d.id === id);
         if (!delivery) return;
         const nextStage = getNextStage(delivery.currentStage);
         if (nextStage) {
-          updateDeliveryStage(id, nextStage, user?.name || 'Unknown', 'Bulk stage update');
-          advanced++;
+          if (await updateDeliveryStage(id, nextStage, user?.name || 'Unknown', 'Bulk stage update')) advanced++;
         } else {
           skipped.push(delivery.invoiceNumber);
         }
-      });
+      }
 
       const description = `Advanced ${advanced} delivery record(s) to their next stage.` +
         (skipped.length > 0 ? ` Skipped ${skipped.length} (already at a final stage).` : '');

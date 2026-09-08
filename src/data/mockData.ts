@@ -11,6 +11,14 @@ import {
   ProductReport
 } from '@/types';
 
+const allEnabledModules = {
+  repair_lab: true,
+  deliveries: true,
+  quotations: true,
+  parties: true,
+  credit_management: true,
+};
+
 // Mock Users
 export const mockUsers: User[] = [
   {
@@ -21,6 +29,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-01-01'),
   },
   {
@@ -31,6 +40,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-02-15'),
   },
   {
@@ -41,6 +51,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-03-10'),
   },
   {
@@ -51,6 +62,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-04-01'),
   },
   {
@@ -61,6 +73,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-05-01'),
   },
   {
@@ -71,6 +84,7 @@ export const mockUsers: User[] = [
     tenantId: 'mock-tenant',
     accountType: 'IT Shop',
     isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-05-08'),
   },
   {
@@ -78,6 +92,10 @@ export const mockUsers: User[] = [
     email: 'tech3@company.com',
     name: 'Noah Technician',
     role: 'technician',
+    tenantId: 'mock-tenant',
+    accountType: 'IT Shop',
+    isPlatformAdmin: false,
+    enabledModules: allEnabledModules,
     createdAt: new Date('2024-05-15'),
   },
 ];
@@ -731,6 +749,8 @@ export const mockInvoices: Invoice[] = [
     totalDiscount: 59950,
     totalTax: 167515,
     grandTotal: 1451500,
+    amountPaid: 1451500,
+    amountDue: 0,
     paymentMode: 'bank',
     status: 'paid',
     createdBy: '2',
@@ -774,6 +794,8 @@ export const mockInvoices: Invoice[] = [
     totalDiscount: 23960,
     totalTax: 56581,
     grandTotal: 491781,
+    amountPaid: 0,
+    amountDue: 491781,
     paymentMode: 'online',
     status: 'pending',
     createdBy: '2',

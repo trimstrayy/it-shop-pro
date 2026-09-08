@@ -397,8 +397,8 @@ const QuotationPreviewPage = () => {
     printWindow.close();
   };
 
-  const handleStatusUpdate = (status: 'sent' | 'accepted' | 'rejected') => {
-    updateQuotation(quotation.id, { status });
+  const handleStatusUpdate = async (status: 'sent' | 'accepted' | 'rejected') => {
+    await updateQuotation(quotation.id, { status });
   };
 
   return (

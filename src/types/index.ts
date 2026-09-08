@@ -1,6 +1,14 @@
 // User & Auth Types
 export type UserRole = 'admin' | 'sales' | 'inventory' | 'accountant' | 'technician';
 
+export interface EnabledModules {
+  repair_lab: boolean;
+  deliveries: boolean;
+  quotations: boolean;
+  parties: boolean;
+  credit_management: boolean;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -8,6 +16,7 @@ export interface User {
   role: UserRole;
   tenantId: string | null;
   accountType: string | null;
+  enabledModules: EnabledModules;
   isPlatformAdmin: boolean;
   avatar?: string;
   createdAt: Date;

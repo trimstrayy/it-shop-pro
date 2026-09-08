@@ -70,17 +70,17 @@ const App = () => {
               <Route path="/products/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
               <Route path="/products/:id/edit" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ProductFormPage /></AccessGate>} />
               <Route path="/inventory" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><InventoryPage /></AccessGate>} />
-              <Route path="/quotations" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationsPage /></AccessGate>} />
-              <Route path="/quotations/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationFormPage /></AccessGate>} />
-              <Route path="/quotations/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><QuotationPreviewPage /></AccessGate>} />
+              <Route path="/quotations" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab" module="quotations"><QuotationsPage /></AccessGate>} />
+              <Route path="/quotations/new" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab" module="quotations"><QuotationFormPage /></AccessGate>} />
+              <Route path="/quotations/:id" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab" module="quotations"><QuotationPreviewPage /></AccessGate>} />
               <Route path="/dashboard" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><DashboardPage /></AccessGate>} />
-              <Route path="/deliveries" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/dashboard"><ComingSoonPage title="Deliveries" description="Delivery tracking is being prepared." /></AccessGate>} />
+              <Route path="/deliveries" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/dashboard" module="deliveries"><ComingSoonPage title="Deliveries" description="Delivery tracking is being prepared." /></AccessGate>} />
               <Route path="/reports" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><ReportsPage /></AccessGate>} />
-              <Route path="/credits" element={<AccessGate allowedRoles={['admin', 'accountant']} fallbackPath="/dashboard"><CreditsPage /></AccessGate>} />
+              <Route path="/credits" element={<AccessGate allowedRoles={['admin', 'accountant']} fallbackPath="/dashboard" module="credit_management"><CreditsPage /></AccessGate>} />
               <Route path="/settings" element={<AccessGate allowedRoles={shopRoles} fallbackPath="/lab"><SettingsPage /></AccessGate>} />
               <Route path="/categories" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><CategoryManagementPage /></AccessGate>} />
               <Route path="/users" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><UsersPage /></AccessGate>} />
-              <Route path="/lab" element={<AccessGate allowedRoles={labRoles} fallbackPath="/dashboard"><LabPage /></AccessGate>} />
+              <Route path="/lab" element={<AccessGate allowedRoles={labRoles} fallbackPath="/dashboard" module="repair_lab"><LabPage /></AccessGate>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

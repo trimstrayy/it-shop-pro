@@ -6,10 +6,11 @@ import { UserRole } from '@/types';
 interface AccessGateProps {
   allowedRoles: UserRole[];
   fallbackPath: string;
+  module?: keyof NonNullable<ReturnType<typeof useAuth>['user']>['enabledModules'];
   children: ReactNode;
 }
 
-export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateProps) => {
+export const AccessGate = ({ allowedRoles, fallbackPath, module, children }: AccessGateProps) => {
   const { isAuthenticated, isInitializing, hasPermission, user } = useAuth();
   const location = useLocation();
 
@@ -25,7 +26,7 @@ export const AccessGate = ({ allowedRoles, fallbackPath, children }: AccessGateP
     return <Navigate to="/platform-admin" replace />;
   }
 
-  if (user?.accountType?.toLowerCase().includes('furniture') && location.pathname === '/lab') {
+  if (module && !user?.enabledModules[module]) {
     return <Navigate to="/dashboard" replace />;
   }
 

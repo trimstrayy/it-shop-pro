@@ -18,7 +18,18 @@ interface TenantRecord {
   owner_email: string | null;
   is_active: boolean;
   created_at: string;
+  enabled_modules: Record<string, boolean>;
 }
+
+const moduleLabels = {
+  repair_lab: 'Repair Lab',
+  deliveries: 'Deliveries',
+  quotations: 'Quotations',
+  parties: 'Parties',
+  credit_management: 'Credit Management',
+} as const;
+
+const defaultModules = Object.fromEntries(Object.keys(moduleLabels).map(key => [key, true])) as Record<keyof typeof moduleLabels, boolean>;
 
 const emptyForm = {
   businessName: '',
@@ -29,6 +40,7 @@ const emptyForm = {
   businessAddress: '',
   adminEmail: '',
   adminName: '',
+  enabledModules: defaultModules,
 };
 
 const getFunctionError = async (error: unknown): Promise<string | undefined> => {
@@ -54,7 +66,7 @@ const PlatformAdminPage = () => {
   const loadTenants = async () => {
     const { data, error } = await supabase
       .from('tenants')
-      .select('id, business_name, business_type, owner_name, owner_email, is_active, created_at')
+      .select('id, business_name, business_type, owner_name, owner_email, is_active, created_at, enabled_modules')
       .order('created_at', { ascending: false });
     if (error) {
       toast({ title: 'Unable to load clients', description: error.message, variant: 'destructive' });
@@ -75,6 +87,16 @@ const PlatformAdminPage = () => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  const toggleTenantModule = async (tenant: TenantRecord, module: keyof typeof moduleLabels) => {
+    const enabled_modules = { ...defaultModules, ...(tenant.enabled_modules || {}), [module]: !tenant.enabled_modules?.[module] };
+    const { data, error } = await supabase.from('tenants').update({ enabled_modules }).eq('id', tenant.id).select('id, enabled_modules');
+    if (error || !data?.length) {
+      toast({ title: 'Module update failed', description: error?.message || 'The module setting did not apply.', variant: 'destructive' });
+      return;
+    }
+    setTenants(current => current.map(item => item.id === tenant.id ? { ...item, enabled_modules } : item));
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -89,6 +111,7 @@ const PlatformAdminPage = () => {
           business_address: form.businessAddress.trim(),
           admin_account_email: form.adminEmail.trim().toLowerCase(),
           admin_account_name: form.adminName.trim(),
+          enabled_modules: form.enabledModules,
         },
       });
       const message = data?.error ?? await getFunctionError(error);
@@ -137,6 +160,7 @@ const PlatformAdminPage = () => {
               <div className="md:col-span-2 lg:col-span-3 border-t pt-4"><p className="font-medium">First admin account</p></div>
               <div className="space-y-2"><Label htmlFor="adminEmail">Admin account email</Label><Input id="adminEmail" type="email" value={form.adminEmail} onChange={(e) => updateField('adminEmail', e.target.value)} required /></div>
               <div className="space-y-2"><Label htmlFor="adminName">Admin account name</Label><Input id="adminName" value={form.adminName} onChange={(e) => updateField('adminName', e.target.value)} required /></div>
+              <div className="space-y-2 md:col-span-2 lg:col-span-3"><Label>Enabled modules</Label><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(moduleLabels).map(([key, label]) => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabledModules[key as keyof typeof moduleLabels]} onChange={(event) => setForm(current => ({ ...current, enabledModules: { ...current.enabledModules, [key]: event.target.checked } }))} />{label}</label>)}</div></div>
               <div className="flex items-end"><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create Client'}</Button></div>
             </form>
           </CardContent>
@@ -149,7 +173,7 @@ const PlatformAdminPage = () => {
               {tenants.map((tenant) => (
                 <Card key={tenant.id}>
                   <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Building2 className="h-5 w-5" />{tenant.business_name}</CardTitle><CardDescription>{tenant.business_type || 'Business'}</CardDescription></CardHeader>
-                  <CardContent className="space-y-2 text-sm"><p><span className="text-muted-foreground">Owner:</span> {tenant.owner_name}</p><p><span className="text-muted-foreground">Email:</span> {tenant.owner_email || 'Not provided'}</p><p><span className="text-muted-foreground">Created:</span> {new Date(tenant.created_at).toLocaleDateString()}</p><p className={tenant.is_active ? 'text-emerald-600' : 'text-destructive'}>{tenant.is_active ? 'Active' : 'Inactive'}</p></CardContent>
+                  <CardContent className="space-y-2 text-sm"><p><span className="text-muted-foreground">Owner:</span> {tenant.owner_name}</p><p><span className="text-muted-foreground">Email:</span> {tenant.owner_email || 'Not provided'}</p><p><span className="text-muted-foreground">Created:</span> {new Date(tenant.created_at).toLocaleDateString()}</p><p className={tenant.is_active ? 'text-emerald-600' : 'text-destructive'}>{tenant.is_active ? 'Active' : 'Inactive'}</p><div className="border-t pt-3"><p className="mb-2 font-medium">Modules</p><div className="space-y-2">{Object.entries(moduleLabels).map(([key, label]) => <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={tenant.enabled_modules?.[key] !== false} onChange={() => void toggleTenantModule(tenant, key as keyof typeof moduleLabels)} />{label}</label>)}</div></div></CardContent>
                 </Card>
               ))}
             </div>

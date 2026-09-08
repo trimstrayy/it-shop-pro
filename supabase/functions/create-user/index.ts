@@ -138,6 +138,7 @@ Deno.serve(async (req: Request) => {
       business_address,
       admin_account_email,
       admin_account_name,
+      enabled_modules,
     } = body as {
       email?: string;
       name?: string;
@@ -150,6 +151,7 @@ Deno.serve(async (req: Request) => {
       business_address?: string;
       admin_account_email?: string;
       admin_account_name?: string;
+      enabled_modules?: Record<string, boolean>;
     };
 
     const hasBusinessFields = [business_name, business_type, owner_name, owner_phone, owner_email,
@@ -205,6 +207,13 @@ Deno.serve(async (req: Request) => {
         owner_email: owner_email?.trim().toLowerCase() || null,
         address: business_address?.trim() || null,
         is_active: true,
+        enabled_modules: enabled_modules ?? {
+          repair_lab: true,
+          deliveries: true,
+          quotations: true,
+          parties: true,
+          credit_management: true,
+        },
       }).select("id").single();
 
       if (tenantErr || !tenant) {

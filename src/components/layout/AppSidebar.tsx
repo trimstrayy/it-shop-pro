@@ -39,11 +39,11 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'sales', 'inventory', 'accountant'] },
   { name: 'Products', href: '/products', icon: Package, roles: ['admin', 'inventory'] },
   { name: 'Inventory', href: '/inventory', icon: Warehouse, roles: ['admin', 'inventory'] },
-  { name: 'Quotations', href: '/quotations', icon: FileText, roles: ['admin', 'sales'] },
-  { name: 'Repair Lab', href: '/lab', icon: Wrench, roles: ['admin', 'technician'] },
-  { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['admin', 'sales', 'inventory'] },
+  { name: 'Quotations', href: '/quotations', icon: FileText, roles: ['admin', 'sales'], module: 'quotations' as const },
+  { name: 'Repair Lab', href: '/lab', icon: Wrench, roles: ['admin', 'technician'], module: 'repair_lab' as const },
+  { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['admin', 'sales', 'inventory'], module: 'deliveries' as const },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'accountant'] },
-  { name: 'Credits', href: '/credits', icon: CircleDollarSign, roles: ['admin', 'accountant'] },
+  { name: 'Credits', href: '/credits', icon: CircleDollarSign, roles: ['admin', 'accountant'], module: 'credit_management' as const },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
   { name: 'User Management', href: '/users', icon: UserCog, roles: ['admin'] },
   { name: 'Categories', href: '/categories', icon: Settings, roles: ['admin'] },
@@ -54,9 +54,8 @@ export const AppSidebar = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
-  const isFurnitureAccount = user?.accountType?.toLowerCase().includes('furniture');
   const filteredNavigation = navigation.filter(item =>
-    hasPermission(item.roles as UserRole[]) && !(isFurnitureAccount && item.href === '/lab')
+    hasPermission(item.roles as UserRole[]) && (!item.module || user?.enabledModules[item.module])
   );
 
   console.log('[AppSidebar] user role', user?.role, 'filtered items', filteredNavigation.map(item => item.name));

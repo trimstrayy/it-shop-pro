@@ -264,7 +264,7 @@ const BillingPage = () => {
       ));
     } else {
       const newItem: InvoiceItem = {
-        id: `invi-${Date.now()}`,
+            id: crypto.randomUUID(),
         productId: product.id,
         productCode: product.productCode,
         productName: product.name,
@@ -378,11 +378,11 @@ const BillingPage = () => {
         : 'paid';
 
       if (fromQuotation) {
-        invoice = convertToInvoice(fromQuotation, paymentMode, normalizedAmountPaid);
+        invoice = await convertToInvoice(fromQuotation, paymentMode, normalizedAmountPaid);
       } else if (fromRepair) {
-        invoice = convertRepairToInvoice(fromRepair, paymentMode, normalizedAmountPaid);
+        invoice = await convertRepairToInvoice(fromRepair, paymentMode, normalizedAmountPaid);
       } else {
-        invoice = addInvoice({
+        invoice = await addInvoice({
           customerId: selectedCustomerId,
           clientName: clientInfo.name,
           clientEmail: clientInfo.email,
