@@ -44,7 +44,7 @@ const BillingPage = () => {
   const quotationId = searchParams.get('quotation');
   const repairId = searchParams.get('repair');
 
-  const { products, categories, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice, customers } = useData();
+  const { products, categories, invoices, addInvoice, quotations, convertToInvoice, repairJobs, convertRepairToInvoice } = useData();
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -58,7 +58,6 @@ const BillingPage = () => {
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('cash');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [fromQuotation, setFromQuotation] = useState<string | null>(null);
@@ -78,7 +77,6 @@ const BillingPage = () => {
     setItems([]);
     setClientInfo({ name: '', email: '', phone: '', address: '' });
     setPaymentMode('cash');
-    setSelectedCustomerId(null);
     setAmountPaid(0);
     setFromQuotation(null);
     setFromRepair(null);
@@ -357,10 +355,10 @@ const BillingPage = () => {
       return;
     }
 
-    if (paymentMode === 'credit' && !selectedCustomerId) {
+    if (paymentMode === 'credit' && (!clientInfo.name.trim() || !clientInfo.phone.trim())) {
       toast({
-        title: 'Customer required for credit sales',
-        description: 'Select a customer before completing a credit sale.',
+        title: 'Customer name and phone required',
+        description: 'Enter the customer name and phone number in Client Details before completing a credit sale.',
         variant: 'destructive',
       });
       return;
@@ -381,7 +379,7 @@ const BillingPage = () => {
         invoice = await convertRepairToInvoice(fromRepair, paymentMode, normalizedAmountPaid);
       } else {
         invoice = await addInvoice({
-          customerId: selectedCustomerId,
+          customerId: null,
           clientName: clientInfo.name,
           clientEmail: clientInfo.email,
           clientPhone: clientInfo.phone,
@@ -798,12 +796,13 @@ const BillingPage = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="clientPhone">Phone</Label>
+                    <Label htmlFor="clientPhone">Phone{paymentMode === 'credit' ? ' *' : ''}</Label>
                     <Input
                       id="clientPhone"
                       value={clientInfo.phone}
                       onChange={(e) => setClientInfo({ ...clientInfo, phone: e.target.value })}
-                      placeholder="Optional"
+                      placeholder={paymentMode === 'credit' ? 'Required for credit sales' : 'Optional'}
+                      required={paymentMode === 'credit'}
                     />
                   </div>
                 </CardContent>
@@ -873,23 +872,9 @@ const BillingPage = () => {
 
                   {paymentMode === 'credit' && (
                     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="credit-customer-select">Customer</Label>
-                        <Select value={selectedCustomerId ?? 'none'} onValueChange={(value) => setSelectedCustomerId(value === 'none' ? null : value)}>
-                          <SelectTrigger id="credit-customer-select">
-                            <SelectValue placeholder="Select customer" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Select a customer</SelectItem>
-                            {customers.map((customer) => (
-                              <SelectItem key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {!selectedCustomerId && (
-                          <p className="text-xs text-destructive">Credit sales require a customer to be selected.</p>
-                        )}
-                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Customer name and phone are required in the Client Details section above for credit sales.
+                      </p>
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">

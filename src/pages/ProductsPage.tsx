@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -6,6 +6,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge, getStatusVariant } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
 import { 
   Select,
   SelectContent,
@@ -19,7 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer, Trash2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Edit, Archive, Eye, Filter, Printer, Trash2, ChevronDown, ChevronRight, FolderOpen } from 'lucide-react';
 import { Product, getProductQuantity, getProductQuantityLabel } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { LabelPrintDialog } from '@/components/LabelPrintDialog';
@@ -40,14 +42,38 @@ const ProductsPage = () => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [productSearch, setProductSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showLabelPrint, setShowLabelPrint] = useState(false);
 
   const filteredProducts = products.filter(product => {
     if (typeFilter !== 'all' && product.type !== typeFilter) return false;
     if (categoryFilter !== 'all' && product.category !== categoryFilter) return false;
     if (statusFilter !== 'all' && product.status !== statusFilter) return false;
+    const search = productSearch.trim().toLowerCase();
+    if (search && ![product.name, product.productCode, product.barcode, product.category].some(value => value.toLowerCase().includes(search))) return false;
     return true;
   });
+
+  const categoryGroups = useMemo(() => {
+    const groups = categories.map(category => ({
+      id: category.id,
+      name: category.name,
+      products: filteredProducts.filter(product => product.categoryId === category.id || product.category === category.name),
+    }));
+    const knownCategoryNames = new Set(categories.map(category => category.name));
+    const uncategorized = filteredProducts.filter(product => !knownCategoryNames.has(product.category));
+    if (uncategorized.length) groups.push({ id: 'other-categories', name: 'Other Categories', products: uncategorized });
+    return groups;
+  }, [categories, filteredProducts]);
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(current => {
+      const next = new Set(current);
+      next.has(categoryId) ? next.delete(categoryId) : next.add(categoryId);
+      return next;
+    });
+  };
 
   const handleArchive = (product: Product) => {
     archiveProduct(product.id);
@@ -273,15 +299,55 @@ const ProductsPage = () => {
         )}
       </div>
 
-      <DataTable
-        data={filteredProducts}
-        columns={columns}
-        searchable
-        searchPlaceholder="Search products..."
-        searchKeys={['name', 'productCode', 'barcode', 'category']}
-        pageSize={10}
-        emptyMessage="No products found"
-      />
+      <div className="space-y-4">
+        <div className="relative max-w-sm">
+          <Input
+            value={productSearch}
+            onChange={(event) => setProductSearch(event.target.value)}
+            placeholder="Search products across categories..."
+          />
+        </div>
+
+        {categoryGroups.map(category => {
+          const isExpanded = expandedCategories.has(category.id);
+          return (
+            <Card key={category.id} className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleCategory(category.id)}
+                className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-muted/40"
+                aria-expanded={isExpanded}
+              >
+                <span className="flex items-center gap-3">
+                  {isExpanded ? <ChevronDown className="h-5 w-5 text-primary" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+                  <FolderOpen className="h-5 w-5 text-primary" />
+                  <span>
+                    <span className="block font-semibold">{category.name}</span>
+                    <span className="block text-sm text-muted-foreground">{category.products.length} product{category.products.length === 1 ? '' : 's'}</span>
+                  </span>
+                </span>
+                <span className="text-sm text-muted-foreground">{isExpanded ? 'Hide products' : 'View products'}</span>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t border-border p-4">
+                  <DataTable
+                    data={category.products}
+                    columns={columns}
+                    searchable={false}
+                    pageSize={10}
+                    emptyMessage="No products in this category match the current filters."
+                  />
+                </div>
+              )}
+            </Card>
+          );
+        })}
+
+        {categoryGroups.length === 0 && (
+          <Card><div className="p-12 text-center text-muted-foreground">No categories or products match the current filters.</div></Card>
+        )}
+      </div>
 
       <LabelPrintDialog 
         open={showLabelPrint} 

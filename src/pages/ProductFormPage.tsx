@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Product } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import { UNIT_OF_MEASURE_OPTIONS } from '@/lib/units-of-measure';
 import { ArrowLeft } from 'lucide-react';
 import {
   AlertDialog,
@@ -322,7 +323,9 @@ const ProductFormPage = () => {
               </div>
                 <div>
                   <Label htmlFor="unitOfMeasure">Unit of measure</Label>
-                  <Input id="unitOfMeasure" value={formData.unitOfMeasure} onChange={(e) => setFormData({ ...formData, unitOfMeasure: e.target.value })} />
+                  <select id="unitOfMeasure" value={formData.unitOfMeasure} onChange={(e) => setFormData({ ...formData, unitOfMeasure: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                    {UNIT_OF_MEASURE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
                 </div>
                 <div className="flex items-center justify-between sm:col-span-2">
                   <div><Label>Cut to order</Label><p className="text-sm text-muted-foreground">Manage stock as batches or rolls</p></div>

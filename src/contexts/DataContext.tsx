@@ -290,14 +290,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         })));
       }
 
-      if (productsResult.data) {
+      if (productsResult.error) {
+        setError(`Unable to load products: ${productsResult.error.message}`);
+      } else if (productsResult.data) {
         setProducts(productsResult.data.map(product => {
           if (product.type === 'hardware') return ({
-          id: product.id,
+          id: product.id ?? product.product_id,
           productCode: product.product_code,
           barcode: product.barcode,
-          name: product.name,
-          category: product.category,
+          name: product.name ?? product.product_name,
+          category: product.category ?? product.category_name,
           categoryId: product.category_id || null,
           attributes: {
             ...(product.attributes || {}),
@@ -307,8 +309,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           unitOfMeasure: product.unit_of_measure || 'unit',
           isCutToOrder: Boolean(product.is_cut_to_order),
           type: 'hardware',
-          costPrice: Number(product.cost_price ?? 0),
-          sellingPrice: Number(product.selling_price ?? 0),
+          costPrice: Number(product.cost_price ?? product.costPrice ?? 0),
+          sellingPrice: Number(product.selling_price ?? product.sellingPrice ?? 0),
           taxPercent: Number(product.tax_percent ?? 0),
           status: product.status,
           description: product.description,
@@ -319,11 +321,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           updatedAt: new Date(product.updated_at),
           } as HardwareProduct);
           if (product.type === 'software') return ({
-          id: product.id,
+          id: product.id ?? product.product_id,
           productCode: product.product_code,
           barcode: product.barcode,
-          name: product.name,
-          category: product.category,
+          name: product.name ?? product.product_name,
+          category: product.category ?? product.category_name,
           categoryId: product.category_id || null,
           attributes: {
             ...(product.attributes || {}),
@@ -333,8 +335,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           unitOfMeasure: product.unit_of_measure || 'unit',
           isCutToOrder: Boolean(product.is_cut_to_order),
           type: 'software',
-          costPrice: Number(product.cost_price ?? 0),
-          sellingPrice: Number(product.selling_price ?? 0),
+          costPrice: Number(product.cost_price ?? product.costPrice ?? 0),
+          sellingPrice: Number(product.selling_price ?? product.sellingPrice ?? 0),
           taxPercent: Number(product.tax_percent ?? 0),
           status: product.status,
           description: product.description,
@@ -345,18 +347,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           updatedAt: new Date(product.updated_at),
           } as SoftwareProduct);
           return {
-            id: product.id,
+            id: product.id ?? product.product_id,
             productCode: product.product_code,
             barcode: product.barcode,
-            name: product.name,
-            category: product.category,
+            name: product.name ?? product.product_name,
+            category: product.category ?? product.category_name,
             categoryId: product.category_id || null,
             attributes: product.attributes || {},
             unitOfMeasure: product.unit_of_measure || 'unit',
             isCutToOrder: Boolean(product.is_cut_to_order),
             type: null,
-            costPrice: Number(product.cost_price ?? 0),
-            sellingPrice: Number(product.selling_price ?? 0),
+            costPrice: Number(product.cost_price ?? product.costPrice ?? 0),
+            sellingPrice: Number(product.selling_price ?? product.sellingPrice ?? 0),
             taxPercent: Number(product.tax_percent ?? 0),
             status: product.status,
             description: product.description,

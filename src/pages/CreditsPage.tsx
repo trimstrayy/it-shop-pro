@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import { Invoice } from '@/types';
-import { format } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { BellRing, CircleDollarSign, TrendingDown } from 'lucide-react';
 
 const formatCurrency = (value: number) => `NPR ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -26,9 +26,18 @@ const CreditsPage = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const openInvoices = useMemo(
-    () => invoices.filter((invoice) => invoice.amountDue > 0 && invoice.status !== 'cancelled').sort((a, b) => b.amountDue - a.amountDue),
+  // Credit invoices are a permanent ledger. Settled invoices leave the open
+  // balance queue, but stay in history so payment timing remains auditable.
+  const creditInvoices = useMemo(
+    () => invoices
+      .filter((invoice) => invoice.paymentMode === 'credit' && invoice.status !== 'cancelled')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [invoices],
+  );
+
+  const openInvoices = useMemo(
+    () => creditInvoices.filter((invoice) => invoice.amountDue > 0).sort((a, b) => b.amountDue - a.amountDue),
+    [creditInvoices],
   );
 
   const customerSummaries = useMemo(() => {
@@ -75,6 +84,10 @@ const CreditsPage = () => {
   const visibleCustomers = customerFilter === 'all'
     ? customerSummaries
     : customerSummaries.filter((customer) => customer.customerId === customerFilter);
+
+  const visibleCreditHistory = customerFilter === 'all'
+    ? creditInvoices
+    : creditInvoices.filter((invoice) => (invoice.customerId || invoice.clientPhone || invoice.clientName) === customerFilter);
 
   const sendReminder = async (invoice: Invoice) => {
     if (!invoice.clientPhone) {
@@ -222,6 +235,7 @@ const CreditsPage = () => {
         <Card>
           <CardHeader>
             <CardTitle>Open credit invoices</CardTitle>
+            <CardDescription>Only balances that still require payment.</CardDescription>
           </CardHeader>
           <CardContent>
             <DataTable
@@ -285,6 +299,75 @@ const CreditsPage = () => {
                         Record Payment
                       </Button>
                     </div>
+                  ),
+                },
+              ]}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Credit history</CardTitle>
+            <CardDescription>All credit invoices remain here after payment, including the time taken to settle each balance.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DataTable
+              data={visibleCreditHistory}
+              searchPlaceholder="Search invoice, customer, or phone"
+              searchKeys={['invoiceNumber', 'clientName', 'clientPhone']}
+              pageSize={10}
+              emptyMessage="No credit billing history found."
+              columns={[
+                {
+                  key: 'invoiceNumber',
+                  header: 'Invoice / Customer',
+                  cell: (invoice: Invoice) => (
+                    <div>
+                      <p className="font-mono text-sm text-primary">{invoice.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground">{invoice.clientName} · {invoice.clientPhone}</p>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'createdAt',
+                  header: 'Credit date',
+                  cell: (invoice: Invoice) => format(new Date(invoice.createdAt), 'MMM dd, yyyy'),
+                },
+                {
+                  key: 'settlement',
+                  header: 'Payment timing',
+                  cell: (invoice: Invoice) => {
+                    const endDate = invoice.paidAt ?? new Date();
+                    const days = Math.max(0, differenceInCalendarDays(endDate, new Date(invoice.createdAt)));
+                    return invoice.amountDue <= 0 && invoice.paidAt
+                      ? <span>{format(new Date(invoice.paidAt), 'MMM dd, yyyy')} · {days} day{days === 1 ? '' : 's'}</span>
+                      : <span className="text-muted-foreground">Open · {days} day{days === 1 ? '' : 's'} so far</span>;
+                  },
+                },
+                {
+                  key: 'grandTotal',
+                  header: 'Credit total',
+                  cell: (invoice: Invoice) => formatCurrency(invoice.grandTotal),
+                },
+                {
+                  key: 'amountPaid',
+                  header: 'Paid / Due',
+                  cell: (invoice: Invoice) => (
+                    <div>
+                      <p>{formatCurrency(invoice.amountPaid)} paid</p>
+                      <p className="text-xs text-muted-foreground">{formatCurrency(invoice.amountDue)} due</p>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  cell: (invoice: Invoice) => (
+                    <StatusBadge
+                      status={invoice.amountDue <= 0 ? 'paid' : invoice.status}
+                      variant={getStatusVariant(invoice.amountDue <= 0 ? 'paid' : invoice.status)}
+                    />
                   ),
                 },
               ]}
