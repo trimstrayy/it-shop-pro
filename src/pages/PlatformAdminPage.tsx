@@ -1,281 +1,187 @@
-import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { Trash2, UserPlus, Shield, Loader2, Search, AlertCircle } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { Building2, LogOut, Plus, ShieldCheck } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from '@/hooks/use-toast';
+import { TemporaryPassword } from '@/components/TemporaryPassword';
 
-// Initialize Supabase Client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export interface UserProfile {
+interface TenantRecord {
   id: string;
-  email: string;
-  full_name: string;
-  role: 'admin' | 'user';
+  business_name: string;
+  business_type: string | null;
+  owner_name: string;
+  owner_email: string | null;
+  is_active: boolean;
   created_at: string;
+  enabled_modules: Record<string, boolean>;
 }
 
-export const AdminUserManagement: React.FC = () => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
+const moduleLabels = {
+  repair_lab: 'Repair Lab',
+  deliveries: 'Deliveries',
+  quotations: 'Quotations',
+  parties: 'Parties',
+  credit_management: 'Credit Management',
+} as const;
 
-  // Form State for Adding Users
-  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [newEmail, setNewEmail] = useState<string>('');
-  const [newFullName, setNewFullName] = useState<string>('');
-  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
+const defaultModules = Object.fromEntries(Object.keys(moduleLabels).map(key => [key, true])) as Record<keyof typeof moduleLabels, boolean>;
+
+const emptyForm = {
+  businessName: '',
+  businessType: 'IT Shop',
+  ownerName: '',
+  ownerPhone: '',
+  ownerEmail: '',
+  businessAddress: '',
+  adminEmail: '',
+  adminName: '',
+  enabledModules: defaultModules,
+};
+
+const getFunctionError = async (error: unknown): Promise<string | undefined> => {
+  const response = (error as { context?: Response })?.context;
+  if (!response) return error instanceof Error ? error.message : undefined;
+
+  try {
+    const payload = await response.clone().json() as { error?: string };
+    return payload.error || `Request failed with status ${response.status}`;
+  } catch {
+    return `Request failed with status ${response.status}`;
+  }
+};
+
+const PlatformAdminPage = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [tenants, setTenants] = useState<TenantRecord[]>([]);
+  const [form, setForm] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadTenants = async () => {
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id, business_name, business_type, owner_name, owner_email, is_active, created_at, enabled_modules')
+      .order('created_at', { ascending: false });
+    if (error) {
+      toast({ title: 'Unable to load clients', description: error.message, variant: 'destructive' });
+    } else {
+      setTenants((data ?? []) as TenantRecord[]);
+    }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (user?.isPlatformAdmin) void loadTenants();
+  }, [user?.isPlatformAdmin]);
 
-  // Fetch all user profiles from database
-  const fetchUsers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.isPlatformAdmin) return <Navigate to="/dashboard" replace />;
 
-      if (fetchError) throw fetchError;
-      setUsers(data || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch users.');
-    } finally {
-      setLoading(false);
-    }
+  const updateField = (field: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
   };
 
-  // Add / Invite New User
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading('add');
-    setError(null);
+  const toggleTenantModule = async (tenant: TenantRecord, module: keyof typeof moduleLabels) => {
+    const enabled_modules = { ...defaultModules, ...(tenant.enabled_modules || {}), [module]: !tenant.enabled_modules?.[module] };
+    const { data, error } = await supabase.from('tenants').update({ enabled_modules }).eq('id', tenant.id).select('id, enabled_modules');
+    if (error || !data?.length) {
+      toast({ title: 'Module update failed', description: error?.message || 'The module setting did not apply.', variant: 'destructive' });
+      return;
+    }
+    setTenants(current => current.map(item => item.id === tenant.id ? { ...item, enabled_modules } : item));
+  };
 
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setIsSubmitting(true);
     try {
-      // Invite user via Supabase Auth
-      const { data, error: authError } = await supabase.auth.admin.inviteUserByEmail(newEmail, {
-        data: { full_name: newFullName, role: newRole }
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          business_name: form.businessName.trim(),
+          business_type: form.businessType,
+          owner_name: form.ownerName.trim(),
+          owner_phone: form.ownerPhone.trim(),
+          owner_email: form.ownerEmail.trim().toLowerCase(),
+          business_address: form.businessAddress.trim(),
+          admin_account_email: form.adminEmail.trim().toLowerCase(),
+          admin_account_name: form.adminName.trim(),
+          enabled_modules: form.enabledModules,
+        },
       });
+      const message = data?.error ?? await getFunctionError(error);
+      if (message || data?.success !== true) throw new Error(message ?? 'The client could not be created.');
 
-      // Fallback: If using public signup or manual profile insertion
-      if (authError) {
-        // Direct profile insert fallback if Auth Admin API is unavailable client-side
-        const { error: profileError } = await supabase.from('profiles').insert([
-          {
-            email: newEmail,
-            full_name: newFullName,
-            role: newRole,
-          }
-        ]);
-        if (profileError) throw profileError;
-      }
-
-      setNewEmail('');
-      setNewFullName('');
-      setNewRole('user');
-      setIsAddModalOpen(false);
-      await fetchUsers();
-    } catch (err: any) {
-      setError(err.message || 'Failed to add user.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // Delete User Function (Alters Database & Auth)
-  const handleDeleteUser = async (userId: string) => {
-    const confirmDelete = window.confirm('Are you sure you want to permanently delete this user? This action alters the database and cannot be undone.');
-    if (!confirmDelete) return;
-
-    setActionLoading(userId);
-    setError(null);
-
-    try {
-      // Call the secure Postgres RPC function created in Step 1
-      const { error: rpcError } = await supabase.rpc('delete_user_by_admin', {
-        target_user_id: userId
+      toast({
+        title: 'Client created',
+        description: data.tempPassword
+          ? <TemporaryPassword password={data.tempPassword} />
+          : 'The new client account is ready.',
       });
-
-      if (rpcError) throw rpcError;
-
-      // Update state locally upon successful database alteration
-      setUsers((prev) => prev.filter((user) => user.id !== userId));
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete user from database.');
+      setForm(emptyForm);
+      await loadTenants();
+    } catch (error) {
+      toast({ title: 'Create client failed', description: error instanceof Error ? error.message : 'Unexpected error', variant: 'destructive' });
     } finally {
-      setActionLoading(null);
+      setIsSubmitting(false);
     }
   };
-
-  const filteredUsers = users.filter((u) =>
-    u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-          <p className="text-sm text-gray-500">Manage user roles, provision accounts, and remove users.</p>
-        </div>
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 transition"
-        >
-          <UserPlus size={16} /> Add User
-        </button>
-      </div>
-
-      {/* Notifications */}
-      {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">
-          <AlertCircle size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-
-      {/* Users Table */}
-      <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-        {loading ? (
-          <div className="flex justify-center items-center py-12 text-gray-500 gap-2">
-            <Loader2 className="animate-spin" size={20} />
-            <span>Loading user accounts...</span>
+    <main className="min-h-screen bg-background p-6 lg:p-10">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <header className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-primary"><ShieldCheck className="h-5 w-5" /><span className="text-sm font-medium">Platform Console</span></div>
+            <h1 className="mt-2 text-3xl font-bold">Clients</h1>
+            <p className="text-muted-foreground">Manage businesses and their first administrator accounts.</p>
           </div>
-        ) : filteredUsers.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
-            No users found matching your criteria.
-          </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b">
-                <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Created Date</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y text-sm">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition">
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900">{user.full_name || 'N/A'}</div>
-                    <div className="text-gray-500 text-xs">{user.email}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'admin'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {user.role === 'admin' && <Shield size={12} />}
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-gray-500 text-xs">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => handleDeleteUser(user.id)}
-                      disabled={actionLoading === user.id}
-                      className="text-red-600 hover:text-red-800 p-1.5 rounded-md hover:bg-red-50 disabled:opacity-50 transition"
-                      title="Delete User"
-                    >
-                      {actionLoading === user.id ? (
-                        <Loader2 className="animate-spin" size={16} />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+          <Button variant="outline" onClick={() => { logout(); navigate('/login'); }}><LogOut className="mr-2 h-4 w-4" />Sign out</Button>
+        </header>
 
-      {/* Add User Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl space-y-4">
-            <h2 className="text-lg font-bold text-gray-900">Add New User</h2>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newFullName}
-                  onChange={(e) => setNewFullName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'user')}
-                  className="w-full px-3 py-2 border rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 border rounded-md text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading === 'add'}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  {actionLoading === 'add' && <Loader2 className="animate-spin" size={14} />}
-                  Create Account
-                </button>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" />Create New Client</CardTitle>
+            <CardDescription>Creates the business and its first tenant administrator together.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2"><Label htmlFor="businessName">Business name</Label><Input id="businessName" value={form.businessName} onChange={(e) => updateField('businessName', e.target.value)} required /></div>
+              <div className="space-y-2"><Label htmlFor="businessType">Business type</Label><select id="businessType" value={form.businessType} onChange={(e) => updateField('businessType', e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option>IT Shop</option><option>Furniture</option><option>Other</option></select></div>
+              <div className="space-y-2"><Label htmlFor="ownerName">Owner name</Label><Input id="ownerName" value={form.ownerName} onChange={(e) => updateField('ownerName', e.target.value)} required /></div>
+              <div className="space-y-2"><Label htmlFor="ownerPhone">Owner phone</Label><Input id="ownerPhone" value={form.ownerPhone} onChange={(e) => updateField('ownerPhone', e.target.value)} /></div>
+              <div className="space-y-2"><Label htmlFor="ownerEmail">Owner email</Label><Input id="ownerEmail" type="email" value={form.ownerEmail} onChange={(e) => updateField('ownerEmail', e.target.value)} /></div>
+              <div className="space-y-2 md:col-span-2"><Label htmlFor="businessAddress">Business address</Label><Input id="businessAddress" value={form.businessAddress} onChange={(e) => updateField('businessAddress', e.target.value)} /></div>
+              <div className="md:col-span-2 lg:col-span-3 border-t pt-4"><p className="font-medium">First admin account</p></div>
+              <div className="space-y-2"><Label htmlFor="adminEmail">Admin account email</Label><Input id="adminEmail" type="email" value={form.adminEmail} onChange={(e) => updateField('adminEmail', e.target.value)} required /></div>
+              <div className="space-y-2"><Label htmlFor="adminName">Admin account name</Label><Input id="adminName" value={form.adminName} onChange={(e) => updateField('adminName', e.target.value)} required /></div>
+              <div className="space-y-2 md:col-span-2 lg:col-span-3"><Label>Enabled modules</Label><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(moduleLabels).map(([key, label]) => <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabledModules[key as keyof typeof moduleLabels]} onChange={(event) => setForm(current => ({ ...current, enabledModules: { ...current.enabledModules, [key]: event.target.checked } }))} />{label}</label>)}</div></div>
+              <div className="flex items-end"><Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create Client'}</Button></div>
             </form>
-          </div>
-        </div>
-      )}
-    </div>
+          </CardContent>
+        </Card>
+
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold">All Clients</h2>
+          {isLoading ? <p className="text-muted-foreground">Loading clients...</p> : tenants.length === 0 ? <p className="text-muted-foreground">No clients found.</p> : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {tenants.map((tenant) => (
+                <Card key={tenant.id}>
+                  <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Building2 className="h-5 w-5" />{tenant.business_name}</CardTitle><CardDescription>{tenant.business_type || 'Business'}</CardDescription></CardHeader>
+                  <CardContent className="space-y-2 text-sm"><p><span className="text-muted-foreground">Owner:</span> {tenant.owner_name}</p><p><span className="text-muted-foreground">Email:</span> {tenant.owner_email || 'Not provided'}</p><p><span className="text-muted-foreground">Created:</span> {new Date(tenant.created_at).toLocaleDateString()}</p><p className={tenant.is_active ? 'text-emerald-600' : 'text-destructive'}>{tenant.is_active ? 'Active' : 'Inactive'}</p><div className="border-t pt-3"><p className="mb-2 font-medium">Modules</p><div className="space-y-2">{Object.entries(moduleLabels).map(([key, label]) => <label key={key} className="flex items-center gap-2"><input type="checkbox" checked={tenant.enabled_modules?.[key] !== false} onChange={() => void toggleTenantModule(tenant, key as keyof typeof moduleLabels)} />{label}</label>)}</div></div></CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
   );
 };
+
+export default PlatformAdminPage;
