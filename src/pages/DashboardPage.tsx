@@ -81,7 +81,7 @@ const DashboardPage = () => {
         <div onClick={() => setShowRevenueBreakdown(true)} className="cursor-pointer">
           <StatCard
             title="Total Revenue"
-            value={`$${totalRevenue.toLocaleString()}`}
+            value={`NPR ${totalRevenue.toLocaleString()}`}
             subtitle="Click for payment breakdown"
             icon={DollarSign}
             variant="success"
@@ -91,7 +91,7 @@ const DashboardPage = () => {
         <StatCard
           title="Pending Invoices"
           value={pendingInvoices}
-          subtitle={`$${invoices.filter(i => i.status === 'pending').reduce((s, i) => s + i.grandTotal, 0).toLocaleString()} outstanding`}
+          subtitle={`NPR ${invoices.filter(i => i.status === 'pending').reduce((s, i) => s + i.grandTotal, 0).toLocaleString()} outstanding`}
           icon={Receipt}
           variant="warning"
         />
@@ -159,7 +159,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-muted-foreground">{quotation.clientName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium text-sm">${quotation.grandTotal.toLocaleString()}</p>
+                    <p className="font-medium text-sm">NPR {quotation.grandTotal.toLocaleString()}</p>
                     <StatusBadge status={quotation.status} variant={getStatusVariant(quotation.status)} />
                   </div>
                 </div>
@@ -191,7 +191,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-muted-foreground">{invoice.clientName}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium text-sm">${invoice.grandTotal.toLocaleString()}</p>
+                    <p className="font-medium text-sm">NPR {invoice.grandTotal.toLocaleString()}</p>
                     <StatusBadge status={invoice.status} variant={getStatusVariant(invoice.status)} />
                   </div>
                 </div>
@@ -236,7 +236,7 @@ const DashboardPage = () => {
           <div className="space-y-4 py-4">
             <div className="text-center mb-6">
               <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-3xl font-bold text-success">${totalRevenue.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-success">NPR {totalRevenue.toLocaleString()}</p>
               <p className="text-xs text-muted-foreground">{paidInvoices.length} paid invoices</p>
             </div>
             
@@ -252,7 +252,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-muted-foreground">{cashCount} transactions</p>
                   </div>
                 </div>
-                <p className="text-lg font-bold">${cashRevenue.toLocaleString()}</p>
+                <p className="text-lg font-bold">NPR {cashRevenue.toLocaleString()}</p>
               </div>
 
               {/* Card/Online */}
@@ -266,7 +266,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-muted-foreground">{onlineCount} transactions</p>
                   </div>
                 </div>
-                <p className="text-lg font-bold">${onlineRevenue.toLocaleString()}</p>
+                <p className="text-lg font-bold">NPR {onlineRevenue.toLocaleString()}</p>
               </div>
 
               {/* Bank Transfer */}
@@ -280,7 +280,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-muted-foreground">{bankCount} transactions</p>
                   </div>
                 </div>
-                <p className="text-lg font-bold">${bankRevenue.toLocaleString()}</p>
+                <p className="text-lg font-bold">NPR {bankRevenue.toLocaleString()}</p>
               </div>
             </div>
           </div>

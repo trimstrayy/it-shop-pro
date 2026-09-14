@@ -31,6 +31,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LabPage from "./pages/LabPage";
 import PlatformAdminPage from "./pages/PlatformAdminPage";
 import CategoryManagementPage from "./pages/CategoryManagementPage";
+import AboutPage from "./pages/AboutPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -81,6 +82,7 @@ const App = () => {
               <Route path="/categories" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><CategoryManagementPage /></AccessGate>} />
               <Route path="/users" element={<AccessGate allowedRoles={['admin']} fallbackPath="/dashboard"><UsersPage /></AccessGate>} />
               <Route path="/lab" element={<AccessGate allowedRoles={labRoles} fallbackPath="/dashboard" module="repair_lab"><LabPage /></AccessGate>} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

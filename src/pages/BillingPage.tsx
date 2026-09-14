@@ -639,7 +639,7 @@ const BillingPage = () => {
                         >
                           <ToggleGroupItem value="all" className="flex-1 sm:flex-none">All</ToggleGroupItem>
                           <ToggleGroupItem value="in_stock" className="flex-1 sm:flex-none">In Stock</ToggleGroupItem>
-                          <ToggleGroupItem value="out_of_stock" className="flex-1 sm:flex-none">Out of Stock</ToggleGroupItem>
+                          {/* <ToggleGroupItem value="out_of_stock" className="flex-1 sm:flex-none">Out of Stock</ToggleGroupItem> */}
                         </ToggleGroup>
                       </div>
                       <div className="max-h-64 overflow-y-auto space-y-1">

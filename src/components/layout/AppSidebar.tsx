@@ -13,6 +13,7 @@ import {
   Wrench,
   UserCog,
   CircleDollarSign,
+  Info,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -113,7 +114,19 @@ export const AppSidebar = () => {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-4">
+      <div className="border-t border-sidebar-border p-4 space-y-2">
+        <NavLink
+          to="/about"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group',
+            location.pathname === '/about'
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+          )}
+        >
+          <Info className={cn('w-4 h-4 flex-shrink-0', collapsed && 'mx-auto')} />
+          {!collapsed && <span className="text-sm">About & Legal</span>}
+        </NavLink>
         <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
           <Avatar className="w-9 h-9">
             <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { Building2, Loader2, LogOut, Pause, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Building2, Info, Loader2, LogOut, Pause, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -364,7 +364,12 @@ const PlatformAdminPage = () => {
             <h1 className="mt-2 text-3xl font-bold">Clients</h1>
             <p className="text-muted-foreground">Manage businesses and their first administrator accounts.</p>
           </div>
-          <Button variant="outline" onClick={() => { logout(); navigate('/login'); }}><LogOut className="mr-2 h-4 w-4" />Sign out</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/about"><Info className="mr-2 h-4 w-4" />About & Legal</Link>
+            </Button>
+            <Button variant="outline" onClick={() => { logout(); navigate('/login'); }}><LogOut className="mr-2 h-4 w-4" />Sign out</Button>
+          </div>
         </header>
 
         <Card>
