@@ -78,16 +78,20 @@ const DashboardPage = () => {
           icon={Package}
           variant="primary"
         />
-        <div onClick={() => setShowRevenueBreakdown(true)} className="cursor-pointer">
+       <div onClick={() => setShowRevenueBreakdown(true)} className="cursor-pointer">
           <StatCard
             title="Total Revenue"
             value={`NPR ${totalRevenue.toLocaleString()}`}
             subtitle="Click for payment breakdown"
-            icon={DollarSign}
-            variant="success"
-            trend={{ value: 12.5, isPositive: true }}
-          />
-        </div>
+            icon={({ className }) => (
+            <span className={`font-bold text-xs leading-none select-none ${className}`}>
+              NPR
+            </span>
+          )}
+          variant="success"
+          trend={{ value: 12.5, isPositive: true }}
+        />
+</div>
         <StatCard
           title="Pending Invoices"
           value={pendingInvoices}
