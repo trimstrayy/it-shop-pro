@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
+import { Search, Plus, Trash2, Receipt, CreditCard, Banknote, Building, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter, X, Pencil, RotateCcw } from 'lucide-react';
 import { Product, InvoiceItem, Invoice, PaymentMode, getProductQuantity } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -37,6 +37,7 @@ type InvoiceSortKey = 'clientName' | 'createdAt' | 'grandTotal';
 type SortDirection = 'asc' | 'desc';
 type InvoiceFilterStatus = 'all' | Invoice['status'];
 type InvoiceFilterPayment = 'all' | Invoice['paymentMode'];
+type PriceInputMode = 'beforeTax' | 'afterTax';
 
 const BillingPage = () => {
   const [searchParams] = useSearchParams();
@@ -48,6 +49,8 @@ const BillingPage = () => {
   const { user } = useAuth();
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [editingPriceItemId, setEditingPriceItemId] = useState<string | null>(null);
+  const [priceInputMode, setPriceInputMode] = useState<PriceInputMode>('beforeTax');
   const [clientInfo, setClientInfo] = useState({
     name: '',
     email: '',
@@ -75,6 +78,8 @@ const BillingPage = () => {
 
   const resetPos = () => {
     setItems([]);
+    setEditingPriceItemId(null);
+    setPriceInputMode('beforeTax');
     setClientInfo({ name: '', email: '', phone: '', address: '' });
     setPaymentMode('cash');
     setAmountPaid(0);
@@ -311,6 +316,10 @@ const BillingPage = () => {
 
   const removeItem = (itemId: string) => {
     setItems(items.filter(i => i.id !== itemId));
+    if (editingPriceItemId === itemId) {
+      setEditingPriceItemId(null);
+      setPriceInputMode('beforeTax');
+    }
   };
 
   const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
@@ -541,6 +550,8 @@ const BillingPage = () => {
                     onClick={() => {
                       setFromQuotation(null);
                       setItems([]);
+                      setEditingPriceItemId(null);
+                      setPriceInputMode('beforeTax');
                       setClientInfo({ name: '', email: '', phone: '', address: '' });
                     }}
                   >
@@ -570,6 +581,8 @@ const BillingPage = () => {
                     onClick={() => {
                       setFromRepair(null);
                       setItems([]);
+                      setEditingPriceItemId(null);
+                      setPriceInputMode('beforeTax');
                       setClientInfo({ name: '', email: '', phone: '', address: '' });
                     }}
                   >
@@ -708,6 +721,11 @@ const BillingPage = () => {
                       {items.map(item => {
                         const product = products.find(p => p.id === item.productId);
                         const stock = product ? getStock(product) : 0;
+                        const isEditingPrice = editingPriceItemId === item.id;
+                        const taxMultiplier = 1 + item.taxPercent / 100;
+                        const displayedPrice = priceInputMode === 'afterTax'
+                          ? item.unitPrice * taxMultiplier
+                          : item.unitPrice;
                         return (
                           <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                             <div className="flex-1">
@@ -718,6 +736,76 @@ const BillingPage = () => {
                                   ({stock} in stock)
                                 </span>
                               </p>
+                              <div className="mt-2 flex items-center gap-2">
+                                {isEditingPrice ? (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <ToggleGroup
+                                      type="single"
+                                      value={priceInputMode}
+                                      onValueChange={(value) => {
+                                        if (value === 'beforeTax' || value === 'afterTax') {
+                                          setPriceInputMode(value);
+                                        }
+                                      }}
+                                      variant="outline"
+                                      size="sm"
+                                      aria-label={`Price mode for ${item.productName}`}
+                                    >
+                                      <ToggleGroupItem value="beforeTax">Before tax</ToggleGroupItem>
+                                      <ToggleGroupItem value="afterTax">After tax</ToggleGroupItem>
+                                    </ToggleGroup>
+                                    <Input
+                                      id={`price-${item.id}`}
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      value={displayedPrice}
+                                      onChange={(event) => updateItem(item.id, {
+                                        unitPrice: Math.max(
+                                          0,
+                                          Number(event.target.value || 0) / (priceInputMode === 'afterTax' ? taxMultiplier : 1),
+                                        ),
+                                      })}
+                                      className="h-7 w-28 text-xs"
+                                      autoFocus
+                                    />
+                                    <span className="text-xs text-muted-foreground">
+                                      {priceInputMode === 'afterTax' ? 'incl. tax' : 'excl. tax'}
+                                    </span>
+                                    {product && item.unitPrice !== product.sellingPrice && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => updateItem(item.id, { unitPrice: product.sellingPrice })}
+                                        title="Reset to selling price"
+                                      >
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span className="text-xs text-muted-foreground">
+                                      NPR {item.unitPrice.toLocaleString()}
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => {
+                                        setPriceInputMode('beforeTax');
+                                        setEditingPriceItemId(item.id);
+                                      }}
+                                      title="Edit unit price"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="flex items-center gap-2">
@@ -818,7 +906,7 @@ const BillingPage = () => {
                     <span>NPR {subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tax (VAT 13%)</span>
+                    <span className="text-muted-foreground">Tax</span>
                     <span>NPR {totalTax.toFixed(0)}</span>
                   </div>
                   <div className="border-t border-border pt-4">

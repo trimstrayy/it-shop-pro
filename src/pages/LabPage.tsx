@@ -1,949 +1,572 @@
 import { useMemo, useState } from 'react';
+import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/ui/page-header';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
-  Bell,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   CreditCard,
   Package,
-  Plus,
-  QrCode,
-  ScanLine,
   ShieldCheck,
+  Sparkles,
   UserRound,
   Wrench,
-  X,
 } from 'lucide-react';
+import { RepairJob } from '@/types';
 
-/**
- * ──────────────────────────────────────────────────────────────────────────
- * UI-ONLY REDESIGN
- * This page still runs on local mock state. Every mock shape below mirrors
- * the real DataContext types (RepairJob, LaborRate, DeviceBrand/Model,
- * Customer) field-for-field so that swapping in `useData()` later is a
- * find-and-replace, not a rewrite. Search "MOCK —" to find what to remove.
- * Two things aren't in DataContext yet and need a decision before wiring:
- *   1. Technicians — RepairJob has `assignedTechId` but there's no
- *      `technicians`/`staff` list on the context to populate a picker from.
- *   2. "Parts" for a job — repair_job_parts.product_id points at your real
- *      `products` table, so the parts picker below should search `products`
- *      (filtered to repair-relevant stock), not a separate hardcoded list.
- * ──────────────────────────────────────────────────────────────────────────
- */
+// -----------------------------------------------------------------------------
+// Status/priority display config.
+//
+// IMPORTANT: the keys below must exactly match the string literal values of
+// RepairJob['status'] and RepairJob['priority'] as defined in src/types/index.ts.
+// If TypeScript flags an error on STATUS_CONFIG or PRIORITY_CONFIG below,
+// it means the real union type uses different literal values than assumed
+// here — just rename the keys to match; everything else stays the same.
+// -----------------------------------------------------------------------------
 
-type RepairStatus = 'to_do' | 'in_progress' | 'waiting_for_parts' | 'quality_check' | 'ready';
-type RepairPriority = 'normal' | 'high' | 'urgent';
-type NotifyChannel = 'sms' | 'email' | 'both';
+const STATUS_CONFIG: Record<RepairJob['status'], { label: string; variant: 'default' | 'info' | 'warning' | 'success' | 'danger' }> = {
+  to_do: { label: 'To Do', variant: 'default' },
+  in_progress: { label: 'In Progress', variant: 'info' },
+  waiting_for_parts: { label: 'Waiting for Parts', variant: 'warning' },
+  quality_check: { label: 'Quality Check', variant: 'info' },
+  ready: { label: 'Ready', variant: 'success' },
+  delivered: { label: 'Delivered', variant: 'success' },
+} as Record<RepairJob['status'], { label: string; variant: 'default' | 'info' | 'warning' | 'success' | 'danger' }>;
 
-type MockRepairJob = {
-  id: string;
-  jobId: string;
-  customerName: string;
-  customerPhone: string;
-  deviceLabel: string;
-  serial: string;
-  issueSummary: string;
-  assignedTechName: string;
-  estimatedCost: number;
-  depositPaid: number;
-  status: RepairStatus;
-  priority: RepairPriority;
-  intakeNotes: string;
-  createdAt: string;
-  warrantyStatus: 'in_warranty' | 'out_of_warranty' | 'void';
-  warrantyEnds: string;
-  readyNotifiedAt: string | null;
-  parts: { name: string; quantity: number; unitCost: number }[];
-  photos: string[];
-};
+const BOARD_COLUMNS: RepairJob['status'][] = ['to_do', 'in_progress', 'waiting_for_parts', 'quality_check', 'ready'] as RepairJob['status'][];
 
-const columns: { key: RepairStatus; label: string }[] = [
-  { key: 'to_do', label: 'To do' },
-  { key: 'in_progress', label: 'In progress' },
-  { key: 'waiting_for_parts', label: 'Waiting for parts' },
-  { key: 'quality_check', label: 'Quality check' },
-  { key: 'ready', label: 'Ready' },
-];
-
-const STATUS_META: Record<RepairStatus, { dot: string; spine: string; text: string; bg: string }> = {
-  to_do: { dot: 'bg-slate-400', spine: '#94A3B8', text: 'text-slate-600', bg: 'bg-slate-50' },
-  in_progress: { dot: 'bg-indigo-500', spine: '#4C5FD5', text: 'text-indigo-700', bg: 'bg-indigo-50/60' },
-  waiting_for_parts: { dot: 'bg-amber-500', spine: '#C2790D', text: 'text-amber-700', bg: 'bg-amber-50/60' },
-  quality_check: { dot: 'bg-violet-500', spine: '#7C57C9', text: 'text-violet-700', bg: 'bg-violet-50/60' },
-  ready: { dot: 'bg-emerald-500', spine: '#0F8B5F', text: 'text-emerald-700', bg: 'bg-emerald-50/60' },
-};
-
-const PRIORITY_META: Record<RepairPriority, { label: string; color: string; icon: boolean }> = {
-  normal: { label: 'Normal', color: '#94A3B8', icon: false },
-  high: { label: 'High', color: '#C2790D', icon: false },
-  urgent: { label: 'Urgent', color: '#C2410C', icon: true },
-};
-
-// MOCK — replace with `brands` / `models` from useData()
-const deviceBrands = [
-  { id: 'brand-apple', name: 'Apple', models: ['MacBook Pro 14', 'MacBook Air 13', 'iPhone 13', 'iPhone 15'] },
-  { id: 'brand-samsung', name: 'Samsung', models: ['Galaxy S23', 'Galaxy S24 Ultra', 'Galaxy Tab S9'] },
-  { id: 'brand-dell', name: 'Dell', models: ['XPS 13', 'Latitude 7440', 'Inspiron 15'] },
-  { id: 'brand-hp', name: 'HP', models: ['LaserJet Pro MFP', 'Pavilion 15', 'EliteBook 840'] },
-];
-
-// MOCK — replace with `laborRates` from useData()
-const laborRates = [
-  { id: 'lr-1', serviceName: 'Diagnostics', basePrice: 800, averageTimeRequiredMinutes: 30 },
-  { id: 'lr-2', serviceName: 'Screen replacement', basePrice: 2200, averageTimeRequiredMinutes: 90 },
-  { id: 'lr-3', serviceName: 'Battery replacement', basePrice: 1800, averageTimeRequiredMinutes: 70 },
-  { id: 'lr-4', serviceName: 'Board repair', basePrice: 3200, averageTimeRequiredMinutes: 150 },
-  { id: 'lr-5', serviceName: 'Software recovery', basePrice: 1500, averageTimeRequiredMinutes: 60 },
-  { id: 'lr-6', serviceName: 'Data recovery', basePrice: 2500, averageTimeRequiredMinutes: 110 },
-];
-
-// MOCK — should come from `products` (repair-relevant stock), not a fixed catalog
-const partCatalog = [
-  { name: 'OEM screen', unitCost: 4200 },
-  { name: 'Battery pack', unitCost: 2800 },
-  { name: 'USB-C charge port', unitCost: 1200 },
-  { name: 'Thermal paste kit', unitCost: 500 },
-  { name: 'Keyboard cable', unitCost: 900 },
-];
-
-// MOCK — replace with `customers` from useData(), with a "new customer" fallback
-const existingCustomers = [
-  { id: 'c-1', name: 'Ranjan Shrestha', phone: '9841022310' },
-  { id: 'c-2', name: 'Nikita Maharjan', phone: '9803312245' },
-  { id: 'c-3', name: 'Bikesh KC', phone: '9812245590' },
-];
-
-// MOCK — no `technicians` source on DataContext yet; see note at top of file
-const technicianRoster = [
-  { name: 'Ariana Moss', initials: 'AM', skill: 'Diagnostics & display' },
-  { name: 'Nabin Shrestha', initials: 'NS', skill: 'Board-level repair' },
-  { name: 'Sujan Khatri', initials: 'SK', skill: 'Battery & power' },
-  { name: 'Priya Rai', initials: 'PR', skill: 'Software recovery' },
-];
-
-const soldHardwareWarranty = [
-  { item: 'Dell Latitude 7440', warrantyEnds: '2027-04-22', status: 'active' as const },
-  { item: 'HP LaserJet Pro MFP', warrantyEnds: '2026-11-15', status: 'expiring' as const },
-  { item: 'WD 2TB External SSD', warrantyEnds: '2025-10-30', status: 'expired' as const },
-];
+const PRIORITY_CONFIG: Record<RepairJob['priority'], { label: string; variant: 'default' | 'warning' | 'danger' }> = {
+  normal: { label: 'Normal', variant: 'default' },
+  high: { label: 'High', variant: 'warning' },
+  urgent: { label: 'Urgent', variant: 'danger' },
+} as Record<RepairJob['priority'], { label: string; variant: 'default' | 'warning' | 'danger' }>;
 
 const todayString = () => new Date().toISOString().slice(0, 10);
 
-const initialJobs: MockRepairJob[] = [
-  {
-    id: 'RJ-1042',
-    jobId: 'RJ-1042',
-    customerName: 'Ranjan Shrestha',
-    customerPhone: '9841022310',
-    deviceLabel: 'Apple MacBook Pro 14',
-    serial: 'MBP-14-8841',
-    issueSummary: 'Battery swelling and keyboard flicker',
-    assignedTechName: 'Ariana Moss',
-    estimatedCost: 7850,
-    depositPaid: 3000,
-    status: 'in_progress',
-    priority: 'high',
-    intakeNotes: 'Customer approved diagnostics and battery replacement.',
-    createdAt: '2026-08-29',
-    warrantyStatus: 'out_of_warranty',
-    warrantyEnds: '2025-08-10',
-    readyNotifiedAt: null,
-    parts: [{ name: 'Battery pack', quantity: 1, unitCost: 2800 }],
-    photos: ['Front glass', 'Battery health'],
-  },
-  {
-    id: 'RJ-1048',
-    jobId: 'RJ-1048',
-    customerName: 'Nikita Maharjan',
-    customerPhone: '9803312245',
-    deviceLabel: 'Samsung Galaxy S23',
-    serial: 'SM-S23-2042',
-    issueSummary: 'Front camera not focusing',
-    assignedTechName: 'Sujan Khatri',
-    estimatedCost: 4800,
-    depositPaid: 1000,
-    status: 'waiting_for_parts',
-    priority: 'normal',
-    intakeNotes: 'Waiting for OEM camera module from distributor.',
-    createdAt: '2026-08-28',
-    warrantyStatus: 'in_warranty',
-    warrantyEnds: '2027-01-28',
-    readyNotifiedAt: null,
-    parts: [],
-    photos: [],
-  },
-  {
-    id: 'RJ-1051',
-    jobId: 'RJ-1051',
-    customerName: 'Bikesh KC',
-    customerPhone: '9812245590',
-    deviceLabel: 'Dell XPS 13',
-    serial: 'XPS-13-9913',
-    issueSummary: 'No display after liquid spill',
-    assignedTechName: 'Nabin Shrestha',
-    estimatedCost: 12250,
-    depositPaid: 5000,
-    status: 'quality_check',
-    priority: 'urgent',
-    intakeNotes: 'Board cleaning complete; final QA pending.',
-    createdAt: '2026-08-27',
-    warrantyStatus: 'void',
-    warrantyEnds: '—',
-    readyNotifiedAt: null,
-    parts: [{ name: 'Thermal paste kit', quantity: 1, unitCost: 500 }],
-    photos: ['Inside board'],
-  },
-  {
-    id: 'RJ-1054',
-    jobId: 'RJ-1054',
-    customerName: 'Aayush Dahal',
-    customerPhone: '9840011223',
-    deviceLabel: 'Apple iPhone 13',
-    serial: 'IPH-13-4050',
-    issueSummary: 'Charging port intermittent',
-    assignedTechName: 'Priya Rai',
-    estimatedCost: 3200,
-    depositPaid: 1000,
-    status: 'ready',
-    priority: 'normal',
-    intakeNotes: 'Ready for pickup and final customer confirmation.',
-    createdAt: '2026-08-25',
-    warrantyStatus: 'in_warranty',
-    warrantyEnds: '2027-02-05',
-    readyNotifiedAt: '2026-09-14',
-    parts: [],
-    photos: [],
-  },
-];
-
-const currency = (n: number) => `NPR ${Math.round(n).toLocaleString('en-IN')}`;
-
-function TicketCard({ job, selected, onSelect }: { job: MockRepairJob; selected: boolean; onSelect: () => void }) {
-  const priority = PRIORITY_META[job.priority];
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'group flex w-full overflow-hidden rounded-lg border bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
-        selected ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200'
-      )}
-    >
-      <div className="flex w-7 shrink-0 items-center justify-center border-r border-dashed border-slate-200 bg-slate-50/70 py-3">
-        <span className="font-mono text-[10px] tracking-[0.12em] text-slate-400 [writing-mode:vertical-rl]">
-          {job.jobId}
-        </span>
-      </div>
-
-      <div className="flex-1 p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{job.customerName}</p>
-            <p className="text-xs text-muted-foreground">{job.deviceLabel}</p>
-          </div>
-          {priority.icon && (
-            <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
-              <AlertTriangle className="h-3 w-3" /> Urgent
-            </span>
-          )}
-        </div>
-
-        <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{job.issueSummary}</p>
-
-        <div className="mt-3 flex items-center justify-between text-xs">
-          <span className="inline-flex items-center gap-1.5 text-slate-500">
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-bold text-white">
-              {job.assignedTechName.split(' ').map((p) => p[0]).join('')}
-            </span>
-            {job.assignedTechName}
-          </span>
-          <span className="font-mono font-medium text-slate-800">{currency(job.estimatedCost)}</span>
-        </div>
-      </div>
-
-      <div className="w-1.5 shrink-0" style={{ backgroundColor: priority.color }} />
-    </button>
-  );
-}
-
-function MetricTile({
-  label,
-  value,
-  color,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  color: string;
-  icon: typeof Wrench;
-}) {
-  return (
-    <div className="flex flex-1 items-center gap-3 px-5 py-4 first:pl-0 last:pr-0">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: `${color}1A` }}>
-        <Icon className="h-4 w-4" style={{ color }} />
-      </div>
-      <div>
-        <p className="font-mono text-2xl font-semibold leading-none text-slate-900">{value}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
+const emptyForm = {
+  customerId: '',
+  newCustomerName: '',
+  newCustomerPhone: '',
+  deviceDescription: '', // e.g. "Samsung Galaxy A55, Black" — see note above re: no devices table exposed yet
+  serialNumber: '',
+  issueSummary: '',
+  intakeNotes: '',
+  priority: 'normal' as RepairJob['priority'],
+  technicianName: '', // free-text for now — see note above re: no staff list exposed yet
+  estimatedCost: '',
+  depositPaid: '',
+};
 
 const LabPage = () => {
-  const [jobs, setJobs] = useState<MockRepairJob[]>(initialJobs);
-  const [selectedJobId, setSelectedJobId] = useState(initialJobs[0].id);
+  const {
+    repairJobs,
+    addRepairJob,
+    updateRepairJob,
+    convertRepairToInvoice,
+    customers,
+  } = useData();
+  const { user } = useAuth();
+
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(repairJobs[0]?.id ?? null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState('overview');
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [form, setForm] = useState(emptyForm);
+  const [statusNote, setStatusNote] = useState('');
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertPaymentMode, setConvertPaymentMode] = useState<'cash' | 'card' | 'bank' | 'credit'>('cash');
+  const [convertAmountPaid, setConvertAmountPaid] = useState('');
 
-  const [notifyChannel, setNotifyChannel] = useState<NotifyChannel>('both');
-  const [notifyPrefs, setNotifyPrefs] = useState({ sms: true, email: true, whatsapp: false });
+  const selectedJob = useMemo(
+    () => repairJobs.find((job) => job.id === selectedJobId) ?? null,
+    [repairJobs, selectedJobId],
+  );
 
-  const [form, setForm] = useState({
-    customerId: '',
-    customerName: '',
-    phone: '',
-    email: '',
-    brandId: deviceBrands[0].id,
-    model: deviceBrands[0].models[0],
-    serialNumber: '',
-    issueSummary: '',
-    receivedDate: todayString(),
-    priority: 'high' as RepairPriority,
-    laborRateId: laborRates[0].id,
-    technician: technicianRoster[0].name,
-    warrantyStatus: 'in_warranty' as MockRepairJob['warrantyStatus'],
-    warrantyEnds: '2027-02-05',
-    deposit: 3000,
-    notes: '',
-  });
+  const activeJobs = repairJobs.filter((job) => job.status !== 'ready' && job.status !== 'delivered').length;
+  const waitingParts = repairJobs.filter((job) => job.status === 'waiting_for_parts').length;
+  const qaQueue = repairJobs.filter((job) => job.status === 'quality_check').length;
+  const readyNow = repairJobs.filter((job) => job.status === 'ready').length;
 
-  const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
-  const selectedBrand = deviceBrands.find((b) => b.id === form.brandId) ?? deviceBrands[0];
-
-  const estimate = useMemo(() => {
-    const labor = laborRates.find((rate) => rate.id === form.laborRateId) ?? laborRates[0];
-    const total = labor.basePrice + Number(form.deposit || 0);
-    return { labor, laborCost: labor.basePrice, total };
-  }, [form.laborRateId, form.deposit]);
-
-  const setField = <K extends keyof typeof form>(field: K, value: (typeof form)[K]) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = <K extends keyof typeof emptyForm>(field: K, value: (typeof emptyForm)[K]) => {
+    setForm((previous) => ({ ...previous, [field]: value }));
   };
 
-  const handleAddJob = (event: React.FormEvent) => {
+  const resetForm = () => setForm(emptyForm);
+
+  const handleCreateJob = async (event: React.FormEvent) => {
     event.preventDefault();
+    setFormError('');
 
-    const newJob: MockRepairJob = {
-      id: `RJ-${Math.floor(1000 + Math.random() * 9000)}`,
-      jobId: `RJ-${Math.floor(1000 + Math.random() * 9000)}`,
-      customerName: form.customerName || 'New customer',
-      customerPhone: form.phone,
-      deviceLabel: `${selectedBrand.name} ${form.model}`,
-      serial: form.serialNumber || 'N/A',
-      issueSummary: form.issueSummary || 'Issue not specified',
-      assignedTechName: form.technician,
-      estimatedCost: estimate.total,
-      depositPaid: Number(form.deposit || 0),
-      status: 'to_do',
-      priority: form.priority,
-      intakeNotes: form.notes || 'Repair intake created and awaiting approval.',
-      createdAt: form.receivedDate,
-      warrantyStatus: form.warrantyStatus,
-      warrantyEnds: form.warrantyEnds || '—',
-      readyNotifiedAt: null,
-      parts: [],
-      photos: [],
-    };
+    if (!form.customerId && !form.newCustomerName.trim()) {
+      setFormError('Select an existing customer or enter a name for a new one.');
+      return;
+    }
+    if (!form.issueSummary.trim()) {
+      setFormError('Please describe the issue.');
+      return;
+    }
 
-    setJobs((prev) => [newJob, ...prev]);
-    setSelectedJobId(newJob.id);
-    setIsCreateOpen(false);
-    setForm({
-      customerId: '',
-      customerName: '',
-      phone: '',
-      email: '',
-      brandId: deviceBrands[0].id,
-      model: deviceBrands[0].models[0],
-      serialNumber: '',
-      issueSummary: '',
-      receivedDate: todayString(),
-      priority: 'high',
-      laborRateId: laborRates[0].id,
-      technician: technicianRoster[0].name,
-      warrantyStatus: 'in_warranty',
-      warrantyEnds: '2027-02-05',
-      deposit: 3000,
-      notes: '',
+    setIsSaving(true);
+    try {
+      // NOTE: this page does not create new customer records — it expects a
+      // customerId from the existing customers list. If newCustomerName was
+      // typed instead of selecting an existing customer, this is captured in
+      // intakeNotes for staff visibility, but no customer row is created here.
+      // Wiring a proper "create customer inline" flow would need confirming
+      // the exact function/shape used elsewhere in the app for that.
+      const combinedNotes = [
+        form.deviceDescription ? `Device: ${form.deviceDescription}` : null,
+        form.serialNumber ? `Serial/IMEI: ${form.serialNumber}` : null,
+        form.technicianName ? `Assigned to: ${form.technicianName}` : null,
+        !form.customerId && form.newCustomerName
+          ? `New customer (not yet in system): ${form.newCustomerName} ${form.newCustomerPhone}`
+          : null,
+        form.intakeNotes || null,
+      ].filter(Boolean).join('\n');
+
+      await addRepairJob({
+        customerId: form.customerId || null,
+        deviceId: null,
+        assignedTechId: null,
+        status: 'to_do' as RepairJob['status'],
+        priority: form.priority,
+        estimatedCost: Number(form.estimatedCost || 0),
+        depositPaid: Number(form.depositPaid || 0),
+        issueSummary: form.issueSummary,
+        intakeNotes: combinedNotes,
+        publicUpdate: '',
+        readyNotifiedAt: undefined,
+        completedAt: undefined,
+        photos: [],
+        updates: [],
+        parts: [],
+      } as unknown as Omit<RepairJob, 'id' | 'jobId' | 'qrToken' | 'createdAt' | 'updatedAt'>);
+
+      setIsCreateOpen(false);
+      resetForm();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to create repair job.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (jobId: string, newStatus: RepairJob['status']) => {
+    await updateRepairJob(jobId, {
+      status: newStatus,
+      completedAt: newStatus === 'delivered' ? new Date() : undefined,
     });
   };
 
-  const addPartToSelectedJob = (part: { name: string; unitCost: number }) => {
-    setJobs((prev) =>
-      prev.map((job) => {
-        if (job.id !== selectedJob.id) return job;
-        const existing = job.parts.find((p) => p.name === part.name);
-        const parts = existing
-          ? job.parts.map((p) => (p.name === part.name ? { ...p, quantity: p.quantity + 1 } : p))
-          : [...job.parts, { name: part.name, quantity: 1, unitCost: part.unitCost }];
-        return { ...job, parts };
-      })
-    );
+  const handleAddNote = async () => {
+    if (!selectedJob || !statusNote.trim()) return;
+    const existingNotes = selectedJob.intakeNotes || '';
+    await updateRepairJob(selectedJob.id, {
+      intakeNotes: `${existingNotes}\n[${new Date().toLocaleString()}] ${statusNote}`.trim(),
+    });
+    setStatusNote('');
   };
 
-  const setTechnician = (name: string) => {
-    setJobs((prev) => prev.map((job) => (job.id === selectedJob.id ? { ...job, assignedTechName: name } : job)));
+  const handleConvertToInvoice = async () => {
+    if (!selectedJob) return;
+    setIsSaving(true);
+    try {
+      await convertRepairToInvoice(
+        selectedJob.id,
+        convertPaymentMode,
+        convertPaymentMode === 'credit' ? Number(convertAmountPaid || 0) : undefined,
+      );
+      setConvertOpen(false);
+      setConvertAmountPaid('');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const activeJobs = jobs.filter((job) => job.status !== 'ready').length;
-  const waitingParts = jobs.filter((job) => job.status === 'waiting_for_parts').length;
-  const qaQueue = jobs.filter((job) => job.status === 'quality_check').length;
-  const readyNow = jobs.filter((job) => job.status === 'ready').length;
-
-  const partsTotal = selectedJob.parts.reduce((sum, p) => sum + p.quantity * p.unitCost, 0);
+  const getCustomerName = (customerId: string | null) => {
+    if (!customerId) return 'Walk-in / Unregistered';
+    return customers.find((c) => c.id === customerId)?.name ?? 'Unknown Customer';
+  };
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <PageHeader
-          title="Repair operations"
-          description="Intake, technician assignment, parts, warranty, and customer updates for every job in the shop."
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" className="gap-2">
-                <ScanLine className="h-4 w-4" />
-                Scan job tag
-              </Button>
-              <Button variant="outline" className="gap-2">
-                <QrCode className="h-4 w-4" />
-                Print job sheet
-              </Button>
-              <Button className="gap-2 bg-slate-900 text-white hover:bg-slate-800" onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4" />
-                New repair
-              </Button>
-            </div>
-          }
-        />
+      <PageHeader
+        title="Repair Lab"
+        description="Track repair intake, technician workflow, and status through to completion."
+        actions={
+          <Button className="gap-2" onClick={() => setIsCreateOpen(true)}>
+            <Wrench className="w-4 h-4" />
+            New Repair Job
+          </Button>
+        }
+      />
 
-        <Card className="border-slate-200">
-          <CardContent className="flex flex-wrap divide-x divide-slate-200 p-0 px-5">
-            <MetricTile label="Active jobs" value={activeJobs} color="#4C5FD5" icon={Wrench} />
-            <MetricTile label="Waiting on parts" value={waitingParts} color="#C2790D" icon={Package} />
-            <MetricTile label="In quality check" value={qaQueue} color="#7C57C9" icon={ShieldCheck} />
-            <MetricTile label="Ready for pickup" value={readyNow} color="#0F8B5F" icon={CheckCircle2} />
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard title="Active Jobs" value={activeJobs} subtitle="Currently in the queue" icon={Wrench} variant="primary" />
+        <StatCard title="Waiting for Parts" value={waitingParts} subtitle="Needs supplier follow-up" icon={Package} variant="warning" />
+        <StatCard title="Quality Check" value={qaQueue} subtitle="QA pending" icon={ShieldCheck} variant="default" />
+        <StatCard title="Ready for Pickup" value={readyNow} subtitle="Awaiting customer" icon={Sparkles} variant="success" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6">
+        {/* Kanban board */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <Clock3 className="w-5 h-5" />
+                Repair Workflow
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto pb-2">
+              <div className="grid min-w-[1000px] grid-cols-5 gap-4">
+                {BOARD_COLUMNS.map((column) => {
+                  const columnJobs = repairJobs.filter((job) => job.status === column);
+                  const config = STATUS_CONFIG[column];
+                  return (
+                    <div key={column} className="rounded-lg border bg-muted/30 p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-semibold">{config?.label ?? column}</p>
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                          {columnJobs.length}
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {columnJobs.map((job) => (
+                          <button
+                            key={job.id}
+                            type="button"
+                            onClick={() => setSelectedJobId(job.id)}
+                            className={cn(
+                              'w-full rounded-lg border p-3 text-left transition hover:border-primary/50',
+                              selectedJobId === job.id ? 'border-primary bg-primary/5' : 'bg-card',
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-semibold">{job.jobId}</p>
+                                <p className="text-xs text-muted-foreground">{getCustomerName(job.customerId)}</p>
+                              </div>
+                              <StatusBadge
+                                status={PRIORITY_CONFIG[job.priority]?.label ?? job.priority}
+                                variant={PRIORITY_CONFIG[job.priority]?.variant === 'danger' ? 'danger' : PRIORITY_CONFIG[job.priority]?.variant === 'warning' ? 'warning' : 'default'}
+                              />
+                            </div>
+                            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{job.issueSummary}</p>
+                            <Separator className="my-2" />
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>NPR {job.estimatedCost.toLocaleString()}</span>
+                            </div>
+                          </button>
+                        ))}
+
+                        {columnJobs.length === 0 && (
+                          <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                            No jobs
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          {/* Kanban */}
-          <Card className="border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="text-base font-semibold">Workflow board</CardTitle>
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock3 className="h-3.5 w-3.5" />
-                Updated moments ago
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto pb-1">
-                <div className="grid min-w-[1080px] grid-cols-5 gap-3">
-                  {columns.map((column) => {
-                    const meta = STATUS_META[column.key];
-                    const columnJobs = jobs.filter((job) => job.status === column.key);
-                    return (
-                      <div key={column.key} className={cn('rounded-lg border border-slate-200 p-2.5', meta.bg)}>
-                        <div className="mb-2.5 flex items-center justify-between px-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} />
-                            <p className={cn('text-xs font-semibold', meta.text)}>{column.label}</p>
-                          </div>
-                          <span className="font-mono text-xs text-slate-500">{columnJobs.length}</span>
-                        </div>
-
-                        <div className="space-y-2">
-                          {columnJobs.map((job) => (
-                            <TicketCard
-                              key={job.id}
-                              job={job}
-                              selected={job.id === selectedJobId}
-                              onSelect={() => {
-                                setSelectedJobId(job.id);
-                                setDetailTab('overview');
-                              }}
-                            />
-                          ))}
-                          {columnJobs.length === 0 && (
-                            <div className="rounded-lg border border-dashed border-slate-300 bg-white/60 p-4 text-center text-[11px] text-muted-foreground">
-                              No jobs
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Detail panel */}
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-mono text-xs text-slate-400">{selectedJob.jobId}</p>
-                  <CardTitle className="text-lg">{selectedJob.customerName}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{selectedJob.deviceLabel}</p>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="shrink-0 border-none text-white"
-                  style={{ backgroundColor: PRIORITY_META[selectedJob.priority].color }}
-                >
-                  {PRIORITY_META[selectedJob.priority].label}
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <Tabs value={detailTab} onValueChange={setDetailTab}>
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="parts">Parts</TabsTrigger>
-                  <TabsTrigger value="photos">Photos</TabsTrigger>
-                  <TabsTrigger value="notify">Notify</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="overview" className="mt-4 space-y-4">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <p className="text-xs font-medium text-slate-500">Issue</p>
-                    <p className="mt-1 text-slate-700">{selectedJob.issueSummary}</p>
+        {/* Job detail panel */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserRound className="w-5 h-5" />
+              Job Detail
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedJob ? (
+              <p className="text-sm text-muted-foreground">Select a job from the board to see details.</p>
+            ) : (
+              <>
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-base font-semibold">{selectedJob.jobId}</p>
+                      <p className="text-sm text-muted-foreground">{getCustomerName(selectedJob.customerId)}</p>
+                    </div>
+                    <StatusBadge
+                      status={STATUS_CONFIG[selectedJob.status]?.label ?? selectedJob.status}
+                      variant={STATUS_CONFIG[selectedJob.status]?.variant ?? 'default'}
+                    />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="mt-4 space-y-2 text-sm">
                     <div>
-                      <p className="text-xs text-muted-foreground">Serial</p>
-                      <p className="font-medium text-slate-900">{selectedJob.serial}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Received</p>
-                      <p className="font-medium text-slate-900">{selectedJob.createdAt}</p>
+                      <span className="text-muted-foreground">Issue: </span>
+                      <span>{selectedJob.issueSummary}</span>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Warranty</p>
-                      <p className="font-medium text-slate-900">{selectedJob.warrantyStatus.replace(/_/g, ' ')}</p>
+                      <span className="text-muted-foreground">Estimated cost: </span>
+                      <span className="font-medium">NPR {selectedJob.estimatedCost.toLocaleString()}</span>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Deposit paid</p>
-                      <p className="font-mono font-medium text-slate-900">{currency(selectedJob.depositPaid)}</p>
+                      <span className="text-muted-foreground">Deposit paid: </span>
+                      <span className="font-medium">NPR {selectedJob.depositPaid.toLocaleString()}</span>
                     </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-slate-500">Technician</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {technicianRoster.map((tech) => (
-                        <Button
-                          key={tech.name}
-                          type="button"
-                          size="sm"
-                          variant={selectedJob.assignedTechName === tech.name ? 'default' : 'outline'}
-                          className="justify-start"
-                          onClick={() => setTechnician(tech.name)}
-                        >
-                          <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[9px] font-bold text-white">
-                            {tech.initials}
-                          </span>
-                          <span className="truncate">{tech.name}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {selectedJob.status === 'ready' && (
-                    <Button
-                      type="button"
-                      className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => (window.location.href = `/billing?repair=${selectedJob.id}`)}
-                    >
-                      <CreditCard className="h-4 w-4" />
-                      Convert to bill
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="parts" className="mt-4 space-y-4">
-                  <div className="space-y-2">
-                    {selectedJob.parts.length === 0 && (
-                      <p className="rounded-lg border border-dashed border-slate-200 p-3 text-center text-xs text-muted-foreground">
-                        No parts logged yet.
-                      </p>
-                    )}
-                    {selectedJob.parts.map((part) => (
-                      <div key={part.name} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                        <div>
-                          <p className="font-medium text-slate-900">{part.name}</p>
-                          <p className="text-xs text-muted-foreground">Qty {part.quantity}</p>
-                        </div>
-                        <span className="font-mono font-semibold text-slate-800">{currency(part.quantity * part.unitCost)}</span>
-                      </div>
-                    ))}
-                    {selectedJob.parts.length > 0 && (
-                      <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-semibold text-slate-900">
-                        <span>Parts total</span>
-                        <span className="font-mono">{currency(partsTotal)}</span>
+                    {selectedJob.intakeNotes && (
+                      <div>
+                        <span className="text-muted-foreground block mb-1">Notes:</span>
+                        <p className="whitespace-pre-wrap text-xs bg-card rounded-md p-2 border">{selectedJob.intakeNotes}</p>
                       </div>
                     )}
                   </div>
+                </div>
 
+                {/* Real parts data, read-only — no UI exists yet to add parts
+                    to an already-created job, since no such function is
+                    currently exposed from DataContext. */}
+                {selectedJob.parts && selectedJob.parts.length > 0 && (
                   <div>
-                    <p className="mb-2 text-xs font-medium text-slate-500">Quick add (from stock)</p>
-                    <div className="grid grid-cols-1 gap-1.5">
-                      {partCatalog.map((part) => (
-                        <button
-                          key={part.name}
-                          type="button"
-                          onClick={() => addPartToSelectedJob(part)}
-                          className="flex items-center justify-between rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-                        >
-                          <span>{part.name}</span>
-                          <span className="font-mono text-slate-500">{currency(part.unitCost)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="photos" className="mt-4 space-y-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {selectedJob.photos.map((photo, index) => (
-                      <div
-                        key={`${photo}-${index}`}
-                        className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2 text-center text-[11px] font-medium text-slate-600"
-                      >
-                        {photo}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 text-slate-400 transition hover:border-slate-400 hover:text-slate-600"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span className="text-[11px]">Add</span>
-                    </button>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-900">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                      Related hardware warranty
-                    </div>
+                    <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <Package className="w-4 h-4" /> Parts Used
+                    </p>
                     <div className="space-y-2">
-                      {soldHardwareWarranty.map((item) => (
-                        <div key={item.item} className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                          <div>
-                            <p className="font-medium text-slate-900">{item.item}</p>
-                            <p className="text-muted-foreground">Ends {item.warrantyEnds}</p>
-                          </div>
-                          <Badge
-                            variant={item.status === 'active' ? 'secondary' : item.status === 'expiring' ? 'outline' : 'destructive'}
-                            className="capitalize"
-                          >
-                            {item.status}
-                          </Badge>
+                      {selectedJob.parts.map((part) => (
+                        <div key={part.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                          <span>Qty {part.quantity}</span>
+                          <span className="font-medium">NPR {part.totalCost.toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                </TabsContent>
+                )}
 
-                <TabsContent value="notify" className="mt-4 space-y-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['sms', 'email', 'both'] as NotifyChannel[]).map((channel) => (
+                {/* Move to next / any status */}
+                <div>
+                  <Label className="mb-2 block">Move to Status</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {BOARD_COLUMNS.concat(['delivered'] as RepairJob['status'][]).map((status) => (
                       <Button
-                        key={channel}
+                        key={status}
                         type="button"
                         size="sm"
-                        variant={notifyChannel === channel ? 'default' : 'outline'}
-                        onClick={() => setNotifyChannel(channel)}
-                        className="capitalize"
+                        variant={selectedJob.status === status ? 'default' : 'outline'}
+                        onClick={() => handleStatusChange(selectedJob.id, status)}
                       >
-                        {channel}
+                        {STATUS_CONFIG[status]?.label ?? status}
                       </Button>
                     ))}
                   </div>
+                </div>
 
-                  <div className="space-y-2 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={notifyPrefs.sms} onChange={(e) => setNotifyPrefs((p) => ({ ...p, sms: e.target.checked }))} />
-                      SMS update
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={notifyPrefs.email} onChange={(e) => setNotifyPrefs((p) => ({ ...p, email: e.target.checked }))} />
-                      Email update
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={notifyPrefs.whatsapp} onChange={(e) => setNotifyPrefs((p) => ({ ...p, whatsapp: e.target.checked }))} />
-                      WhatsApp
-                    </label>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                    {notifyChannel} update will be sent to {selectedJob.customerName} ({selectedJob.customerPhone}) with status and pickup timing.
-                  </div>
-
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 p-3 text-sm text-slate-700">
-                    <CalendarDays className="h-4 w-4 text-slate-500" />
-                    {selectedJob.readyNotifiedAt ? `Notified on ${selectedJob.readyNotifiedAt}` : 'Not yet notified'}
-                  </div>
-
-                  <Button type="button" className="w-full gap-2">
-                    <Bell className="h-4 w-4" />
-                    Send status update
+                {/* Add a note */}
+                <div className="space-y-2">
+                  <Label htmlFor="statusNote">Add Note</Label>
+                  <Textarea
+                    id="statusNote"
+                    rows={2}
+                    placeholder="e.g. Part ordered from supplier, ETA 3 days"
+                    value={statusNote}
+                    onChange={(e) => setStatusNote(e.target.value)}
+                  />
+                  <Button type="button" size="sm" variant="outline" onClick={handleAddNote} disabled={!statusNote.trim()}>
+                    Save Note
                   </Button>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </div>
+                </div>
+
+                {(selectedJob.status === 'ready' || selectedJob.status === 'delivered') && (
+                  <Button
+                    type="button"
+                    className="w-full gap-2"
+                    onClick={() => setConvertOpen(true)}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Convert to Invoice
+                  </Button>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Intake dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+      {/* Create job dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <Wrench className="h-5 w-5 text-slate-900" />
-              New repair intake
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="w-5 h-5" />
+              New Repair Intake
             </DialogTitle>
-            <DialogDescription>Capture the customer, device, diagnosis, and technician assignment.</DialogDescription>
+            <DialogDescription>Capture device details and create a new repair job.</DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAddJob} className="space-y-6 pt-2">
-            <section className="space-y-3">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                <UserRound className="h-3.5 w-3.5" /> Customer
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="customerName">Name</Label>
-                  <Input
-                    id="customerName"
-                    list="existing-customers"
-                    value={form.customerName}
-                    onChange={(e) => setField('customerName', e.target.value)}
-                    placeholder="Full name"
-                  />
-                  <datalist id="existing-customers">
-                    {existingCustomers.map((c) => (
-                      <option key={c.id} value={c.name} />
-                    ))}
-                  </datalist>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} placeholder="98xxxxxxxx" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email (optional)</Label>
-                <Input id="email" type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="name@email.com" />
-              </div>
-            </section>
-
-            <Separator />
-
-            <section className="space-y-3">
-              <p className="text-xs font-semibold text-slate-500">Device</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="brand">Brand</Label>
-                  <select
-                    id="brand"
-                    value={form.brandId}
-                    onChange={(e) => {
-                      const brand = deviceBrands.find((b) => b.id === e.target.value) ?? deviceBrands[0];
-                      setField('brandId', brand.id);
-                      setField('model', brand.models[0]);
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    {deviceBrands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>{brand.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="model">Model</Label>
-                  <select
-                    id="model"
-                    value={form.model}
-                    onChange={(e) => setField('model', e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    {selectedBrand.models.map((model) => (
-                      <option key={model} value={model}>{model}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="serialNumber">Serial / IMEI</Label>
-                  <Input id="serialNumber" value={form.serialNumber} onChange={(e) => setField('serialNumber', e.target.value)} placeholder="Serial or IMEI" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="priority">Priority</Label>
-                  <select
-                    id="priority"
-                    value={form.priority}
-                    onChange={(e) => setField('priority', e.target.value as RepairPriority)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="issueSummary">Problem description</Label>
-                <Textarea
-                  id="issueSummary"
-                  value={form.issueSummary}
-                  onChange={(e) => setField('issueSummary', e.target.value)}
-                  rows={3}
-                  placeholder="Symptoms, and any previous repair attempts."
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="warrantyStatus">Warranty</Label>
-                  <select
-                    id="warrantyStatus"
-                    value={form.warrantyStatus}
-                    onChange={(e) => setField('warrantyStatus', e.target.value as MockRepairJob['warrantyStatus'])}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="in_warranty">In warranty</option>
-                    <option value="out_of_warranty">Out of warranty</option>
-                    <option value="void">Void</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="warrantyEnds">Warranty end</Label>
-                  <Input id="warrantyEnds" type="date" value={form.warrantyEnds} onChange={(e) => setField('warrantyEnds', e.target.value)} />
-                </div>
-              </div>
-            </section>
-
-            <Separator />
-
-            <section className="space-y-3">
-              <p className="text-xs font-semibold text-slate-500">Assignment & pricing</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="laborRate">Labor service</Label>
-                  <select
-                    id="laborRate"
-                    value={form.laborRateId}
-                    onChange={(e) => setField('laborRateId', e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    {laborRates.map((rate) => (
-                      <option key={rate.id} value={rate.id}>{rate.serviceName} — {currency(rate.basePrice)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="technician">Technician</Label>
-                  <select
-                    id="technician"
-                    value={form.technician}
-                    onChange={(e) => setField('technician', e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    {technicianRoster.map((tech) => (
-                      <option key={tech.name} value={tech.name}>{tech.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="deposit">Deposit collected (NPR)</Label>
-                <Input
-                  id="deposit"
-                  type="number"
-                  min={0}
-                  value={form.deposit}
-                  onChange={(e) => setField('deposit', Number(e.target.value))}
-                />
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-slate-900">Estimate</p>
-                  <Badge variant="outline">{estimate.labor.serviceName}</Badge>
-                </div>
-                <div className="mt-2 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Labor</span>
-                    <span className="font-mono">{currency(estimate.laborCost)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Deposit</span>
-                    <span className="font-mono">{currency(Number(form.deposit || 0))}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between text-base font-semibold text-slate-900">
-                    <span>Total estimate</span>
-                    <span className="font-mono">{currency(estimate.total)}</span>
-                  </div>
-                </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Parts aren't priced yet — add them from the job's Parts tab once it's created.
-                </p>
-              </div>
-            </section>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">Internal notes</Label>
-              <Textarea id="notes" value={form.notes} onChange={(e) => setField('notes', e.target.value)} rows={2} placeholder="Notes for technicians or policy details." />
+          <form onSubmit={handleCreateJob} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="customerId">Customer</Label>
+              <select
+                id="customerId"
+                value={form.customerId}
+                onChange={(e) => handleFormChange('customerId', e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">— Select existing customer —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                ))}
+              </select>
             </div>
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-                <X className="mr-1.5 h-4 w-4" />
-                Cancel
-              </Button>
-              <Button type="submit">Create repair job</Button>
+            {!form.customerId && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="newCustomerName">New Customer Name</Label>
+                  <Input id="newCustomerName" value={form.newCustomerName} onChange={(e) => handleFormChange('newCustomerName', e.target.value)} placeholder="If not in the list above" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="newCustomerPhone">Phone</Label>
+                  <Input id="newCustomerPhone" value={form.newCustomerPhone} onChange={(e) => handleFormChange('newCustomerPhone', e.target.value)} placeholder="98xxxxxxxx" />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="deviceDescription">Device</Label>
+                <Input id="deviceDescription" value={form.deviceDescription} onChange={(e) => handleFormChange('deviceDescription', e.target.value)} placeholder="e.g. Samsung Galaxy A55" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="serialNumber">Serial / IMEI</Label>
+                <Input id="serialNumber" value={form.serialNumber} onChange={(e) => handleFormChange('serialNumber', e.target.value)} />
+              </div>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="issueSummary">Issue Description *</Label>
+              <Textarea id="issueSummary" rows={3} value={form.issueSummary} onChange={(e) => handleFormChange('issueSummary', e.target.value)} placeholder="Describe the problem" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <select
+                  id="priority"
+                  value={form.priority}
+                  onChange={(e) => handleFormChange('priority', e.target.value as RepairJob['priority'])}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="technicianName">Assign To</Label>
+                <Input id="technicianName" value={form.technicianName} onChange={(e) => handleFormChange('technicianName', e.target.value)} placeholder="Technician name" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="estimatedCost">Estimated Cost (NPR)</Label>
+                <Input id="estimatedCost" type="number" min="0" value={form.estimatedCost} onChange={(e) => handleFormChange('estimatedCost', e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="depositPaid">Deposit Paid (NPR)</Label>
+                <Input id="depositPaid" type="number" min="0" value={form.depositPaid} onChange={(e) => handleFormChange('depositPaid', e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="intakeNotes">Intake Notes</Label>
+              <Textarea id="intakeNotes" rows={2} value={form.intakeNotes} onChange={(e) => handleFormChange('intakeNotes', e.target.value)} />
+            </div>
+
+            {formError && <p className="text-sm text-destructive">{formError}</p>}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Create Repair Job'}</Button>
+            </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert to invoice dialog */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Convert Repair to Invoice
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['cash', 'card', 'bank', 'credit'] as const).map((mode) => (
+                  <Button
+                    key={mode}
+                    type="button"
+                    size="sm"
+                    variant={convertPaymentMode === mode ? 'default' : 'outline'}
+                    onClick={() => setConvertPaymentMode(mode)}
+                    className="capitalize"
+                  >
+                    {mode}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {convertPaymentMode === 'credit' && (
+              <div className="space-y-2">
+                <Label htmlFor="convertAmountPaid">Amount Paid Now (NPR)</Label>
+                <Input
+                  id="convertAmountPaid"
+                  type="number"
+                  min="0"
+                  value={convertAmountPaid}
+                  onChange={(e) => setConvertAmountPaid(e.target.value)}
+                  placeholder="0 for full credit"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)}>Cancel</Button>
+            <Button onClick={handleConvertToInvoice} disabled={isSaving}>
+              {isSaving ? 'Processing...' : 'Confirm & Create Invoice'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppLayout>

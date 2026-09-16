@@ -882,7 +882,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       amountDue: paymentMode === 'credit' ? grandTotalValue : 0,
       paymentMode,
       status: resolveInvoiceStatus(paymentMode, resolvedAmountPaid, grandTotalValue),
-      createdBy: repairJob.assignedTechId || 'system',
+      createdBy: repairJob.assignedTechId || user?.id || null,
       paidAt: paymentMode === 'credit' ? undefined : new Date(),
     });
 
