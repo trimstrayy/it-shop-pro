@@ -87,6 +87,9 @@ const AboutPage = () => {
               <li><strong>Contact:</strong> {CONTACT_INFO.contactName}</li>
               <li><strong>Email:</strong> {CONTACT_INFO.email}</li>
               <li><strong>Phone:</strong> {CONTACT_INFO.phone}</li>
+              <li><strong>Website:</strong> <a href={CONTACT_INFO.website} target="_blank" rel="noopener noreferrer">
+                {CONTACT_INFO.website}
+              </a></li>
             </ul>
             <p>
               Support requests are typically answered within two business days. Issues that
@@ -98,11 +101,11 @@ const AboutPage = () => {
         <TabsContent value="terms" className="mt-0">
           <div className="prose prose-slate max-w-none">
             <h1>Terms of Service / Service Agreement — {APP_NAME}</h1>
-            <p><strong>Effective date: [DATE]</strong></p>
-            <p>
+            <p><strong>Effective date: 15th September, 2026</strong></p>
+            {/* <p>
               <strong>Between:</strong> {CONTACT_INFO.businessName} ("Provider") and
               [Client Business Name] ("Client")
-            </p>
+            </p> */}
 
             <h2>1. Service Provided</h2>
             <p>
@@ -113,15 +116,15 @@ const AboutPage = () => {
 
             <h2>2. Fees and Payment</h2>
             <ul>
-              <li><strong>Setup fee:</strong> NPR [AMOUNT], payable [upon delivery / as agreed].</li>
-              <li><strong>Ongoing fee:</strong> [Describe the actual agreed model — e.g. "NPR [AMOUNT] per year, due on the anniversary of the setup date" OR "maintenance and support billed per incident as requested by Client"].</li>
-              <li>Late payment of any ongoing fee may result in suspension of access until payment is received, with [X days'] notice given beforehand.</li>
+              <li><strong>Setup fee:</strong> NPR 14,999, payable [upon delivery / as agreed].</li>
+              <li><strong>Ongoing fee:</strong> NPR 13,499 per year, due on the anniversary of the setup date <br></br>* Maintenance and support billed per incident as requested by Client.*</li>
+              <li>Late payment of any ongoing fee may result in suspension of access until payment is received, with 7 days notice given beforehand.</li>
             </ul>
 
             <h2>3. What's Included</h2>
             <ul>
               <li>Access to the System as configured at delivery, including the modules specifically enabled for Client's business.</li>
-              <li>[Describe included support period, e.g. "30 days of complimentary bug-fix support following delivery"].</li>
+              <li>Free bug fixing. On request feature addition costing extra feature charge for build and deployment.</li>
               <li>Hosting and maintenance of the underlying database and application infrastructure by Provider.</li>
             </ul>
 
@@ -183,31 +186,18 @@ const AboutPage = () => {
             <p>This agreement is governed by the laws of Nepal.</p>
 
             <h2>12. Signatures</h2>
-            <p>Provider: ___________________________ Date: ___________</p>
-            <p>Client: ______________________________ Date: ___________</p>
+            <p>Provider: ___________________________ Date: 15th September, 2026</p>
+            {/* <p>Client: ______________________________ Date: ___________</p> */}
 
             <hr />
-            <p>
-              <em>
-                This document is a template and has not been reviewed by a lawyer. Have it
-                reviewed by a qualified legal professional before use as a binding contract,
-                particularly the liability, payment, and termination clauses.
-              </em>
-            </p>
           </div>
         </TabsContent>
 
         <TabsContent value="privacy" className="mt-0">
           <div className="prose prose-slate max-w-none">
             <h1>Privacy Policy — {APP_NAME}</h1>
-            <p><strong>Last updated: [DATE]</strong></p>
+            <p><strong>Last updated: 15th September, 2026</strong></p>
             <p><strong>Provided by: {CONTACT_INFO.businessName}</strong></p>
-            <p>
-              This Privacy Policy explains what information this software system ("the
-              System") collects, how it is used, and how it is protected, for [Client
-              Business Name] ("the Business") and its staff who use the System.
-            </p>
-
             <h2>1. What Information the System Collects</h2>
             <p>The System stores the following categories of information as part of its normal operation:</p>
             <ul>
@@ -296,14 +286,6 @@ const AboutPage = () => {
             </p>
 
             <hr />
-            <p>
-              <em>
-                This document is a template and has not been reviewed by a lawyer. Consult a
-                qualified legal professional before relying on it as a binding privacy
-                policy, particularly regarding compliance with Nepal's data protection
-                regulations.
-              </em>
-            </p>
           </div>
         </TabsContent>
       </Tabs>

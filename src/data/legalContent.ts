@@ -1,6 +1,7 @@
 export const CONTACT_INFO = {
   businessName: 'Stack Sync Technologies Pvt. Ltd.',
-  contactName: 'Support Team',
-  email: 'support@example.com',
-  phone: '+977-1-0000000',
+  contactName: 'Aayush Dahal, Proprietor',
+  email: 'ayush11dahal@gmail.com',
+  phone: '+977 9741740551',
+  website: 'https://adaayush.vercel.app',
 };
